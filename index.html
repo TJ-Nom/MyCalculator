@@ -18,7 +18,10 @@
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 
   <style>
-    body {
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
       background-color: #121212;
       color: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -45,15 +48,15 @@
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between overflow-x-hidden">
+<body class="flex flex-col justify-between h-full w-full">
 
   <!-- ========================================== -->
-  <!-- 1. ステルス電卓画面 (初期表示モード) -->
+  <!-- 1. ステルス電卓画面 -->
   <!-- ========================================== -->
-  <div id="calculator-view" class="flex-1 flex flex-col justify-between max-w-md mx-auto w-full p-4 h-screen">
+  <div id="calculator-view" class="relative flex-1 flex flex-col justify-between max-w-md mx-auto w-full p-4 h-full overflow-hidden">
     
     <!-- 電卓ヘッダー -->
-    <div class="flex items-center justify-between py-2 border-b border-gray-800 text-gray-400">
+    <div class="flex items-center justify-between py-2 border-b border-gray-800 text-gray-400 shrink-0">
       <div class="flex items-center space-x-2">
         <button id="calc-menu-btn" class="p-1 hover:text-white" title="メニュー">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -62,15 +65,35 @@
         <span id="stealth-title" class="font-semibold text-gray-200 select-none cursor-pointer tracking-wider px-2 py-1 rounded active:bg-gray-800">万能電卓</span>
       </div>
       <div class="flex items-center space-x-3">
-        <!-- 計算履歴ボタン -->
         <button id="calc-history-toggle" class="p-1 hover:text-white" title="計算履歴">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </button>
       </div>
     </div>
 
+    <!-- スライドサイドメニュー（ハンバーガー） -->
+    <div id="side-menu-overlay" class="hidden absolute inset-0 bg-black/60 z-40 transition-opacity"></div>
+    <div id="side-menu" class="absolute top-0 left-0 bottom-0 w-64 bg-gray-900 border-r border-gray-800 z-50 transform -translate-x-full transition-transform duration-200 flex flex-col justify-between p-4 shadow-2xl">
+      <div class="space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-gray-800 text-gray-200">
+          <span class="font-bold text-sm">万能電卓 メニュー</span>
+          <button id="btn-close-side-menu" class="p-1 text-gray-400 hover:text-white">✕</button>
+        </div>
+        <div class="space-y-1 text-sm text-gray-300">
+          <button class="w-full text-left px-3 py-2.5 rounded-lg bg-gray-800 text-emerald-400 font-medium">標準電卓</button>
+          <button id="menu-item-history" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-800 text-gray-300">計算履歴</button>
+          <button class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-800 text-gray-400">単位換算 (準備中)</button>
+        </div>
+      </div>
+      <div class="pt-3 border-t border-gray-800">
+        <button id="menu-item-recorder" class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:text-gray-300 flex items-center space-x-2">
+          <span>● システム管理画面</span>
+        </button>
+      </div>
+    </div>
+
     <!-- 計算履歴ドロワー（折りたたみ） -->
-    <div id="calc-history-panel" class="hidden bg-gray-900 border border-gray-800 rounded-lg p-3 my-2 max-h-40 overflow-y-auto text-sm">
+    <div id="calc-history-panel" class="hidden bg-gray-900 border border-gray-800 rounded-lg p-3 my-2 max-h-36 overflow-y-auto text-sm shrink-0">
       <div class="flex justify-between items-center mb-2 pb-1 border-b border-gray-800 text-xs text-gray-400">
         <span>計算履歴</span>
         <button id="clear-calc-history" class="text-red-400 hover:underline">消去</button>
@@ -81,41 +104,41 @@
     </div>
 
     <!-- 電卓ディスプレイ -->
-    <div class="flex-1 flex flex-col justify-end py-4 px-2 text-right">
-      <div id="calc-sub-display" class="text-gray-400 text-sm h-6 overflow-hidden font-mono tracking-wide"></div>
+    <div class="flex-1 flex flex-col justify-end py-2 px-2 text-right shrink min-h-0">
+      <div id="calc-sub-display" class="text-gray-400 text-sm h-5 overflow-hidden font-mono tracking-wide"></div>
       <div class="flex items-baseline justify-end space-x-1">
         <span id="calc-main-display" class="text-5xl font-light tracking-tight font-mono text-white break-all">0</span>
-        <!-- ステルス録音インジケーター（通常の小数点ドットに見せかける） -->
-        <span id="stealth-rec-indicator" class="recording-dot w-2 h-2 rounded-full bg-transparent mb-1"></span>
+        <!-- ステルス録音インジケーター -->
+        <span id="stealth-rec-indicator" class="recording-dot w-2 h-2 rounded-full bg-transparent mb-1 shrink-0"></span>
       </div>
     </div>
 
-    <!-- 電卓キーパッド -->
-    <div class="grid grid-cols-4 gap-2 pb-6">
-      <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcAction('clear')">C</button>
-      <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcAction('paren')">()</button>
-      <button id="btn-percent" class="stealth-btn bg-amber-600 active:bg-amber-500 text-white text-xl font-medium p-4 rounded-2xl" onclick="handlePercentTap()">%</button>
-      <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('/')">÷</button>
+    <!-- 電卓キーパッド（100dvh収縮フィット） -->
+    <div class="grid grid-cols-4 gap-2 pb-2 pt-1 shrink-0">
+      <button class="stealth-btn bg-gray-800 text-emerald-400 text-lg sm:text-xl font-medium py-3 rounded-2xl" onclick="calcAction('clear')">C</button>
+      <button class="stealth-btn bg-gray-800 text-emerald-400 text-lg sm:text-xl font-medium py-3 rounded-2xl" onclick="calcAction('paren')">()</button>
+      <button id="btn-percent" class="stealth-btn bg-amber-600 active:bg-amber-500 text-white text-lg sm:text-xl font-medium py-3 rounded-2xl" onclick="handlePercentTap()">%</button>
+      <button class="stealth-btn bg-gray-800 text-emerald-400 text-lg sm:text-xl font-medium py-3 rounded-2xl" onclick="calcInput('/')">÷</button>
 
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('7')">7</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('8')">8</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('9')">9</button>
-      <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('*')">×</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('7')">7</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('8')">8</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('9')">9</button>
+      <button class="stealth-btn bg-gray-800 text-emerald-400 text-lg sm:text-xl font-medium py-3 rounded-2xl" onclick="calcInput('*')">×</button>
 
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('4')">4</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('5')">5</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('6')">6</button>
-      <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('-')">-</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('4')">4</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('5')">5</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('6')">6</button>
+      <button class="stealth-btn bg-gray-800 text-emerald-400 text-lg sm:text-xl font-medium py-3 rounded-2xl" onclick="calcInput('-')">-</button>
 
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('1')">1</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('2')">2</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('3')">3</button>
-      <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('+')">+</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('1')">1</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('2')">2</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('3')">3</button>
+      <button class="stealth-btn bg-gray-800 text-emerald-400 text-lg sm:text-xl font-medium py-3 rounded-2xl" onclick="calcInput('+')">+</button>
 
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('0')">0</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('00')">00</button>
-      <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('.')">.</button>
-      <button class="stealth-btn bg-emerald-500 active:bg-emerald-400 text-white text-2xl font-medium p-4 rounded-2xl" onclick="calcAction('equals')">=</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('0')">0</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('00')">00</button>
+      <button class="stealth-btn bg-gray-900 text-white text-xl sm:text-2xl font-light py-3 rounded-2xl" onclick="calcInput('.')">.</button>
+      <button class="stealth-btn bg-emerald-500 active:bg-emerald-400 text-white text-xl sm:text-2xl font-medium py-3 rounded-2xl" onclick="calcAction('equals')">=</button>
     </div>
   </div>
 
@@ -123,10 +146,10 @@
   <!-- ========================================== -->
   <!-- 2. ボイスレコーダー＆文字起こし管理画面 -->
   <!-- ========================================== -->
-  <div id="recorder-view" class="hidden flex-1 max-w-lg mx-auto w-full p-4 flex-col space-y-4">
+  <div id="recorder-view" class="hidden flex-1 max-w-lg mx-auto w-full p-4 flex-col space-y-4 overflow-y-auto h-full">
     
     <!-- 管理ヘッダー -->
-    <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+    <div class="flex items-center justify-between pb-3 border-b border-gray-800 shrink-0">
       <div class="flex items-center space-x-2">
         <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center">
           <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
@@ -147,7 +170,7 @@
     </div>
 
     <!-- 設定パネル -->
-    <div id="settings-panel" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4 text-sm">
+    <div id="settings-panel" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4 text-sm shrink-0">
       <div class="flex justify-between items-center pb-2 border-b border-gray-800">
         <span class="font-semibold text-gray-200">各種設定</span>
         <button id="btn-close-settings" class="text-gray-400 hover:text-white text-xs">閉じる</button>
@@ -189,7 +212,7 @@
     </div>
 
     <!-- 録音コントロール -->
-    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center space-y-3">
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center space-y-3 shrink-0">
       <div class="w-full bg-gray-950 rounded-xl h-14 flex items-center justify-center px-4 overflow-hidden border border-gray-800">
         <canvas id="waveform-canvas" class="w-full h-10"></canvas>
       </div>
@@ -202,14 +225,12 @@
     </div>
 
     <!-- 録音・要約リスト一覧 -->
-    <div class="space-y-3 flex-1 overflow-y-auto">
+    <div class="space-y-3 flex-1">
       <div class="flex justify-between items-center text-xs text-gray-400 px-1">
         <span>録音・要約一覧 (端末内IndexedDB)</span>
         <span id="recordings-count">0 件</span>
       </div>
-      <div id="recordings-list" class="space-y-3">
-        <!-- 録音カードが動的に挿入されます -->
-      </div>
+      <div id="recordings-list" class="space-y-3 pb-6"></div>
     </div>
 
   </div>
@@ -235,7 +256,7 @@
       history: []
     };
 
-    // PWA Manifest（standalone）
+    // PWA Manifest
     (function setupPwa() {
       const manifest = {
         name: "万能電卓",
@@ -256,6 +277,38 @@
       const manifestLink = document.getElementById('manifest-placeholder');
       if (manifestLink) manifestLink.setAttribute('href', manifestUrl);
     })();
+
+    // サイドメニュー開閉ロジック
+    const menuBtn = document.getElementById('calc-menu-btn');
+    const sideMenu = document.getElementById('side-menu');
+    const sideMenuOverlay = document.getElementById('side-menu-overlay');
+    const closeSideMenuBtn = document.getElementById('btn-close-side-menu');
+
+    function openSideMenu() {
+      sideMenuOverlay.classList.remove('hidden');
+      sideMenu.classList.remove('-translate-x-full');
+    }
+
+    function closeSideMenu() {
+      sideMenuOverlay.classList.add('hidden');
+      sideMenu.classList.add('-translate-x-full');
+    }
+
+    if (menuBtn) menuBtn.addEventListener('click', openSideMenu);
+    if (closeSideMenuBtn) closeSideMenuBtn.addEventListener('click', closeSideMenu);
+    if (sideMenuOverlay) sideMenuOverlay.addEventListener('click', closeSideMenu);
+
+    document.getElementById('menu-item-history').addEventListener('click', () => {
+      closeSideMenu();
+      document.getElementById('calc-history-panel').classList.remove('hidden');
+    });
+
+    document.getElementById('menu-item-recorder').addEventListener('click', () => {
+      closeSideMenu();
+      if (confirm("ボイスレコーダーの管理画面を開きますか？")) {
+        showView('recorder');
+      }
+    });
 
     // IndexedDB の初期化
     function initDB() {
@@ -347,7 +400,7 @@
       list.innerHTML = calcState.history.map(item => `<div>${escapeHtml(item)}</div>`).join('');
     }
 
-    // ステルス切り替え制御
+    // ステルス切り替え制御（タイトル長押し）
     let pressTimer = null;
     const titleEl = document.getElementById('stealth-title');
 

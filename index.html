@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>万能電卓</title>
   
-  <!-- Web App Manifest (インラインBlob生成: standalone) -->
+  <!-- Web App Manifest (インラインBlob生成) -->
   <link rel="manifest" id="manifest-placeholder">
   <meta name="theme-color" content="#121212">
   <meta name="mobile-web-app-capable" content="yes">
@@ -18,10 +18,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 
   <style>
-    html, body {
-      height: 100%;
-      height: 100dvh;
-      overflow: hidden;
+    body {
       background-color: #121212;
       color: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -46,14 +43,25 @@
       background-color: #ef4444 !important;
       box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
     }
+    /* PWAインストール済みで起動した場合は最大化ボタンを隠す */
+    @media all and (display-mode: standalone) {
+      #calc-fullscreen-btn {
+        display: none !important;
+      }
+    }
+    @media all and (display-mode: fullscreen) {
+      #calc-fullscreen-btn {
+        display: none !important;
+      }
+    }
   </style>
 </head>
-<body class="flex flex-col justify-between">
+<body class="min-h-screen flex flex-col justify-between overflow-x-hidden">
 
   <!-- ========================================== -->
   <!-- 1. ステルス電卓画面 (初期表示モード) -->
   <!-- ========================================== -->
-  <div id="calculator-view" class="flex-1 flex flex-col justify-between max-w-md mx-auto w-full p-4 h-full">
+  <div id="calculator-view" class="flex-1 flex flex-col justify-between max-w-md mx-auto w-full p-4 h-screen">
     
     <!-- 電卓ヘッダー -->
     <div class="flex items-center justify-between py-2 border-b border-gray-800 text-gray-400">
@@ -65,9 +73,9 @@
         <span id="stealth-title" class="font-semibold text-gray-200 select-none cursor-pointer tracking-wider px-2 py-1 rounded active:bg-gray-800">万能電卓</span>
       </div>
       <div class="flex items-center space-x-3">
-        <!-- 最大化 / 画面フィットボタン（OS警告の出るrequestFullscreenは呼ばない） -->
-        <button id="calc-fullscreen-btn" class="p-1 hover:text-white" title="画面フィット切替">
-          <svg id="fullscreen-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- 最大化 / 全画面切り替えボタン -->
+        <button id="calc-fullscreen-btn" class="p-1 hover:text-white" title="全画面表示切替">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
           </svg>
         </button>
@@ -103,6 +111,7 @@
     <div class="grid grid-cols-4 gap-2 pb-6">
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcAction('clear')">C</button>
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcAction('paren')">()</button>
+      <!-- ％ボタン：シングルタップで%計算、素早いダブルタップで録音ON/OFF -->
       <button id="btn-percent" class="stealth-btn bg-amber-600 active:bg-amber-500 text-white text-xl font-medium p-4 rounded-2xl" onclick="handlePercentTap()">%</button>
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('/')">÷</button>
 
@@ -132,7 +141,7 @@
   <!-- ========================================== -->
   <!-- 2. ボイスレコーダー＆文字起こし管理画面 -->
   <!-- ========================================== -->
-  <div id="recorder-view" class="hidden flex-1 max-w-lg mx-auto w-full p-4 flex-col space-y-4 overflow-y-auto">
+  <div id="recorder-view" class="hidden flex-1 max-w-lg mx-auto w-full p-4 flex-col space-y-4">
     
     <!-- 管理ヘッダー -->
     <div class="flex items-center justify-between pb-3 border-b border-gray-800">
@@ -211,12 +220,12 @@
     </div>
 
     <!-- 録音・要約リスト一覧 -->
-    <div class="space-y-3 flex-1">
+    <div class="space-y-3 flex-1 overflow-y-auto">
       <div class="flex justify-between items-center text-xs text-gray-400 px-1">
         <span>録音・要約一覧 (端末内IndexedDB)</span>
         <span id="recordings-count">0 件</span>
       </div>
-      <div id="recordings-list" class="space-y-3 pb-6">
+      <div id="recordings-list" class="space-y-3">
         <!-- 録音カードが動的に挿入されます -->
       </div>
     </div>
@@ -244,7 +253,7 @@
       history: []
     };
 
-    // PWA Manifest（standalone指定）
+    // PWA Manifest（standalone）
     (function setupPwa() {
       const manifest = {
         name: "万能電卓",
@@ -266,13 +275,23 @@
       if (manifestLink) manifestLink.setAttribute('href', manifestUrl);
     })();
 
-    // 画面フィットボタン（requestFullscreenを呼ばずに画面スクロール位置とUI高さを最適化）
+    // 全画面切り替えボタン（ブラウザタブで開いている場合用）
     const fullscreenBtn = document.getElementById('calc-fullscreen-btn');
     if (fullscreenBtn) {
       fullscreenBtn.addEventListener('click', () => {
-        window.scrollTo(0, 1);
-        const calcView = document.getElementById('calculator-view');
-        calcView.style.height = `${window.innerHeight}px`;
+        if (!document.fullscreenElement) {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          } else if (document.documentElement.webkitRequestFullscreen) {
+            document.documentElement.webkitRequestFullscreen();
+          }
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          }
+        }
       });
     }
 

@@ -33,7 +33,6 @@
       transform: scale(0.96);
       filter: brightness(1.2);
     }
-    /* アコーディオンアニメーション */
     details summary::-webkit-details-marker {
       display: none;
     }
@@ -63,6 +62,13 @@
         <span id="stealth-title" class="font-semibold text-gray-200 select-none cursor-pointer tracking-wider px-2 py-1 rounded active:bg-gray-800">万能電卓</span>
       </div>
       <div class="flex items-center space-x-3">
+        <!-- 最大化 / 全画面切り替えボタン -->
+        <button id="calc-fullscreen-btn" class="p-1 hover:text-white" title="全画面表示切替">
+          <svg id="fullscreen-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+          </svg>
+        </button>
+        <!-- 計算履歴ボタン -->
         <button id="calc-history-toggle" class="p-1 hover:text-white" title="計算履歴">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </button>
@@ -251,7 +257,7 @@
     };
 
     // ----------------------------------------------------
-    // PWA Manifest（インライン生成：システム警告の出ないstandalone）
+    // PWA Manifest（インライン生成）
     // ----------------------------------------------------
     (function setupPwa() {
       const manifest = {
@@ -273,6 +279,24 @@
       const manifestLink = document.getElementById('manifest-placeholder');
       if (manifestLink) manifestLink.setAttribute('href', manifestUrl);
     })();
+
+    // ----------------------------------------------------
+    // 全画面表示（最大化）トグル処理
+    // ----------------------------------------------------
+    const fullscreenBtn = document.getElementById('calc-fullscreen-btn');
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        }
+      });
+    }
 
     // ----------------------------------------------------
     // IndexedDB の初期化
@@ -340,17 +364,13 @@
       updateCalcDisplay();
     }
 
-    // 「％」のダブルタップ判定処理（数式を汚さずに録音ON/OFF）
     function handlePercentTap() {
       if (percentTapTimer) {
-        // 450ms以内の2回目タップ -> ダブルタップ（録音トグル）
         clearTimeout(percentTapTimer);
         percentTapTimer = null;
         toggleStealthRecording();
       } else {
-        // 1回目のタップ -> 待機
         percentTapTimer = setTimeout(() => {
-          // シングルタップ確定：通常の電卓 % 計算 (/100)
           try {
             const val = parseFloat(calcState.display);
             if (!isNaN(val)) {
@@ -455,7 +475,6 @@
         mediaRecorder.start(250);
         isRecording = true;
 
-        // UI表示更新（電卓のドットを赤点灯）
         document.getElementById('stealth-rec-indicator').classList.add('active');
         document.getElementById('rec-btn-icon').className = "w-6 h-6 rounded-full bg-red-600 animate-pulse";
         document.getElementById('record-status-label').textContent = "● 録音中...";
@@ -475,7 +494,6 @@
       if (animFrameId) cancelAnimationFrame(animFrameId);
       isRecording = false;
 
-      // UI表示更新（ドット消灯）
       document.getElementById('stealth-rec-indicator').classList.remove('active');
       document.getElementById('rec-btn-icon').className = "w-6 h-6 rounded-sm bg-white";
       document.getElementById('record-status-label').textContent = "保存・処理中...";
@@ -515,18 +533,13 @@
       const title = `録音_${timestampStr}`;
 
       try {
-        // AudioBuffer へ変換
         const arrayBuffer = await rawBlob.arrayBuffer();
         const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
         const decodedBuffer = await tempCtx.decodeAudioData(arrayBuffer);
 
-        // 無音カット
         const trimmedBuffer = trimSilence(decodedBuffer, 0.02);
-
-        // MP3 エンコード
         const mp3Blob = encodeToMp3(trimmedBuffer);
 
-        // IndexedDB 保存用オブジェクト
         const recordItem = {
           title: title,
           date: `${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
@@ -543,8 +556,6 @@
         renderRecordCard(recordItem, true);
 
         document.getElementById('record-status-label').textContent = "待機中 (電卓で「%」を素早いダブルタップ)";
-
-        // バックグラウンドで Gemini 要約を実行
         requestGeminiSummary(recordItem);
       } catch (err) {
         console.error("Audio processing failed:", err);
@@ -578,7 +589,6 @@
       const sampleBlockSize = 1152;
       const mp3Data = [];
 
-      // Float32 -> Int16
       const int16Samples = new Int16Array(samples.length);
       for (let i = 0; i < samples.length; i++) {
         const s = Math.max(-1, Math.min(1, samples[i]));
@@ -602,7 +612,6 @@
     async function requestGeminiSummary(item) {
       const apiKey = localStorage.getItem('gemini_api_key') || '';
       const model = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
-      const cardEl = document.getElementById(`record-card-${item.id}`);
 
       if (!apiKey) {
         updateCardSummaryStatus(item.id, "APIキーが未登録です。設定画面からGemini APIキーを入力してください。", true);
@@ -652,13 +661,11 @@
           parsed = { summary: textResp, transcription: textResp };
         }
 
-        // DB更新
         item.summary = parsed.summary || "要約を取得できませんでした";
         item.transcription = parsed.transcription || "文字起こしを取得できませんでした";
         item.status = 'completed';
         await updateRecordInDB(item);
 
-        // UI反映
         applySummaryToCard(item);
       } catch (err) {
         console.error(err);

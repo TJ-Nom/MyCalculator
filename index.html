@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>万能電卓</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- LameJS (純粋クライアント側 MP3 エンコーダー) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+
+  <!-- PWA & Mobile WebApp 設定 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#121212">
+  <link id="manifest-placeholder" rel="manifest">
+
+  <style>
+    /* モバイル・アプリ感向上スタイル */
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input, textarea {
+      user-select: auto;
+    }
+    /* スクロールバー非表示 */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    html, body {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      height: 100%;
+      background-color: #121212;
+      color: #e5e7eb;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 1rem);
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen bg-[#121212] text-gray-200">
+
+  <!-- ======================================================== -->
+  <!-- 1. 通常モード（ボイスレコーダー＆解析一覧画面）            -->
+  <!-- ======================================================== -->
+  <div id="normal-mode-view" class="flex-1 flex flex-col max-w-md w-full mx-auto p-4 space-y-4">
+    <!-- ヘッダー -->
+    <header class="flex items-center justify-between border-b border-gray-800 pb-3 pt-2">
+      <div class="flex items-center space-x-2">
+        <div class="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold shadow">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-bold text-white tracking-wide">ボイスレコーダー</h1>
+          <p class="text-xs text-gray-400">Gemini要約・MP3・端末内IndexedDB保存</p>
+        </div>
+      </div>
+      
+      <!-- 右上アクションボタン群 -->
+      <div class="flex items-center space-x-1.5">
+        <!-- 電卓モードへ戻るボタン -->
+        <button id="goto-calc-btn" title="電卓画面へ遷移" class="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-emerald-400 transition flex items-center justify-center border border-gray-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+          </svg>
+        </button>
+        <!-- 設定ボタン -->
+        <button id="toggle-settings-btn" title="設定" class="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 transition border border-gray-700">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 設定パネル (デフォルト非表示) -->
+    <div id="settings-panel" class="hidden bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3 shadow-xl">
+      <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+        <h2 class="text-sm font-bold text-gray-200">各種設定</h2>
+        <button id="close-settings-btn" class="text-xs text-gray-400 hover:text-white">閉じる</button>
+      </div>
+
+      <!-- Gemini API設定 (折りたたみ) -->
+      <details class="bg-gray-800/60 rounded-xl p-3 border border-gray-700/50">
+        <summary class="cursor-pointer text-xs font-semibold text-emerald-400 select-none">Gemini API設定 (要約用)</summary>
+        <div class="mt-3 space-y-2">
+          <label class="text-xs text-gray-300 block">Gemini API Key:</label>
+          <input type="password" id="custom-api-key" placeholder="AIzaSy..." class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-[10px] text-gray-400">端末内部(LocalStorage)に保存されます</span>
+            <button id="save-api-key-btn" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition">保存</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- ネットワーク＆無音カットトグル -->
+      <div class="space-y-2 pt-1">
+        <label class="flex items-center justify-between text-xs text-gray-300">
+          <span>Wi-Fi接続時のみ自動要約 (節約)</span>
+          <input type="checkbox" id="wifi-only-toggle" checked class="w-4 h-4 accent-emerald-500 rounded">
+        </label>
+        <label class="flex items-center justify-between text-xs text-gray-300">
+          <span>無音部分を自動カット</span>
+          <input type="checkbox" id="silence-cut-toggle" checked class="w-4 h-4 accent-emerald-500 rounded">
+        </label>
+      </div>
+
+      <!-- 暗号化バックアップ & 復元 -->
+      <details class="bg-gray-800/60 rounded-xl p-3 border border-gray-700/50">
+        <summary class="cursor-pointer text-xs font-semibold text-sky-400 select-none">セキュア暗号化バックアップ & 復元</summary>
+        <div class="mt-3 space-y-2">
+          <input type="password" id="backup-password" placeholder="バックアップ用パスワード" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white">
+          <div class="flex gap-2">
+            <button id="export-backup-btn" class="flex-1 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-medium">暗号化保存</button>
+            <label class="flex-1 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-xs font-medium text-center cursor-pointer">
+              復元読込
+              <input type="file" id="import-backup-file" accept=".enc" class="hidden">
+            </label>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- 中段: 録音＆波形モニターエリア -->
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center justify-center space-y-4 shadow-lg">
+      <!-- リアルタイム波形キャンバス -->
+      <div class="w-full h-24 bg-gray-950 rounded-xl overflow-hidden relative border border-gray-800 flex items-center justify-center">
+        <canvas id="waveform-canvas" class="w-full h-full block"></canvas>
+        <div id="waveform-placeholder" class="absolute text-xs text-gray-600 font-mono flex items-center gap-1.5 pointer-events-none">
+          <span>〜 波形モニター待機中 〜</span>
+        </div>
+      </div>
+
+      <!-- 録音時間表示 -->
+      <div class="text-center">
+        <div id="recording-timer" class="text-3xl font-mono font-bold tracking-wider text-gray-200">00:00</div>
+        <p id="recording-status" class="text-xs text-gray-500 mt-1">待機中 (ボタンを押して録音開始)</p>
+      </div>
+
+      <!-- 大きな録音ボタン -->
+      <button id="record-btn" class="w-20 h-20 rounded-full bg-rose-600 hover:bg-rose-500 active:scale-95 transition-all flex items-center justify-center shadow-lg shadow-rose-900/40">
+        <div id="record-btn-icon" class="w-7 h-7 rounded-full bg-white transition-all"></div>
+      </button>
+    </div>
+
+    <!-- 下段: 録音・要約一覧 (アコーディオン) -->
+    <div class="border border-gray-800 rounded-2xl overflow-hidden bg-gray-900/60 shadow">
+      <button id="toggle-list-btn" class="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-semibold text-gray-300 hover:bg-gray-800/60">
+        <span class="flex items-center gap-2">
+          <span>録音・要約一覧</span>
+          <span id="recordings-count-badge" class="px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 text-[10px]">0件</span>
+        </span>
+        <span id="list-toggle-arrow" class="text-gray-500 text-sm">▼</span>
+      </button>
+      <div id="recordings-container" class="hidden p-3 space-y-3 max-h-96 overflow-y-auto">
+        <!-- 録音カードがここに動的挿入されます -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 2. ステルスモード（万能電卓 UI / デフォルト表示）        -->
+  <!-- ======================================================== -->
+  <div id="stealth-calc-view" class="fixed inset-0 z-50 bg-[#121212] flex flex-col justify-between p-3 select-none">
+    
+    <!-- 電卓上部ヘッダー -->
+    <div class="flex items-center justify-between px-2 pt-1 pb-2 border-b border-gray-800/80">
+      <div class="flex items-center space-x-2">
+        <button id="calc-menu-btn" class="text-gray-400 p-1.5 hover:text-white">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+        <!-- タイトル長押しでステルス解除 -->
+        <span id="stealth-title" class="text-base font-medium text-gray-200 cursor-pointer">万能電卓</span>
+      </div>
+
+      <!-- 右側アイコン群 (全画面切替 + 計算履歴) -->
+      <div class="flex items-center space-x-2 text-gray-400">
+        <button id="fullscreen-toggle-btn" title="全画面切替" class="p-1.5 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+          </svg>
+        </button>
+        <button id="calc-history-btn" title="計算履歴" class="p-1.5 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 電卓ディスプレイ表示エリア -->
+    <div class="flex-1 flex flex-col justify-end px-3 py-4 text-right">
+      <!-- 式表示エリア -->
+      <div id="calc-formula" class="text-lg text-gray-400 font-mono tracking-wide min-h-[1.75rem] overflow-x-auto whitespace-nowrap"></div>
+      <!-- メイン結果表示エリア (録音中のみ小数点が赤色点灯) -->
+      <div class="text-5xl font-mono text-white tracking-tight flex items-baseline justify-end overflow-x-auto">
+        <span id="calc-display-digits">0</span>
+        <span id="calc-stealth-dot" class="text-gray-700 transition-colors duration-300">.</span>
+      </div>
+    </div>
+
+    <!-- サブ機能トグルバー -->
+    <div class="flex items-center justify-between px-3 py-2 text-xs text-gray-400 border-t border-gray-800/60">
+      <button id="toggle-scientific-btn" class="hover:text-white flex items-center gap-1">&lt;/&gt; 関数</button>
+      <button id="calc-backspace-btn" class="hover:text-white p-1">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414a2 2 0 011.414-.586H19a2 2 0 012 2v10a2 2 0 01-2 2h-9.172a2 2 0 01-1.414-.586L3 12z"></path></svg>
+      </button>
+    </div>
+
+    <!-- 関数キー (トグル表示) -->
+    <div id="scientific-keys" class="hidden grid grid-cols-5 gap-2 mb-2 px-1 text-xs font-mono">
+      <button class="calc-sci-btn py-2 bg-gray-900 rounded-lg text-gray-300" data-val="sin(">sin</button>
+      <button class="calc-sci-btn py-2 bg-gray-900 rounded-lg text-gray-300" data-val="cos(">cos</button>
+      <button class="calc-sci-btn py-2 bg-gray-900 rounded-lg text-gray-300" data-val="tan(">tan</button>
+      <button class="calc-sci-btn py-2 bg-gray-900 rounded-lg text-gray-300" data-val="√(">√</button>
+      <button class="calc-sci-btn py-2 bg-gray-900 rounded-lg text-gray-300" data-val="^">^</button>
+    </div>
+
+    <!-- 電卓メインキーパッド (CASIO/万能電卓ハイブリッド) -->
+    <div class="grid grid-cols-4 gap-2.5 pb-2">
+      <!-- 行 1 -->
+      <button class="calc-btn h-14 rounded-2xl bg-gray-900 text-emerald-400 font-bold text-xl active:bg-gray-800" data-key="C">C</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-900 text-emerald-400 font-bold text-xl active:bg-gray-800" data-key="()">()</button>
+      <!-- % ボタン: くすんだオレンジ色 & ダブルタップで録音トグル -->
+      <button id="calc-percent-btn" class="h-14 rounded-2xl bg-[#b45309] hover:bg-[#92400e] text-white font-bold text-xl active:scale-95 transition" data-key="%">%</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-900 text-emerald-400 font-bold text-2xl active:bg-gray-800" data-key="÷">÷</button>
+
+      <!-- 行 2 -->
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="7">7</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="8">8</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="9">9</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-900 text-emerald-400 font-bold text-2xl active:bg-gray-800" data-key="×">×</button>
+
+      <!-- 行 3 -->
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="4">4</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="5">5</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="6">6</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-900 text-emerald-400 font-bold text-2xl active:bg-gray-800" data-key="-">-</button>
+
+      <!-- 行 4 -->
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="1">1</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="2">2</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="3">3</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-900 text-emerald-400 font-bold text-2xl active:bg-gray-800" data-key="+">+</button>
+
+      <!-- 行 5 -->
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="0">0</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key="00">00</button>
+      <button class="calc-btn h-14 rounded-2xl bg-gray-800/90 text-white font-medium text-2xl active:bg-gray-700" data-key=".">.</button>
+      <button class="calc-btn h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold text-3xl active:scale-95 transition" data-key="=">=</button>
+    </div>
+
+    <!-- 計算履歴ドロワー (スライドイン) -->
+    <div id="calc-history-drawer" class="hidden absolute inset-0 z-50 bg-[#121212]/95 p-4 flex flex-col backdrop-blur-md">
+      <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+        <h3 class="text-base font-bold text-white">計算履歴</h3>
+        <div class="flex items-center space-x-3">
+          <button id="clear-calc-history-btn" class="text-xs text-rose-400 hover:text-rose-300">履歴消去</button>
+          <button id="close-calc-history-btn" class="text-gray-400 hover:text-white text-lg">✕</button>
+        </div>
+      </div>
+      <p class="text-[10px] text-gray-500 mt-2">※項目を長押しするとメモを追加・編集できます</p>
+      <div id="calc-history-list" class="flex-1 overflow-y-auto space-y-3 py-3"></div>
+    </div>
+  </div>
+
+  <!-- ステルス解除確認モーダル -->
+  <div id="exit-stealth-modal" class="hidden fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-xs w-full p-5 space-y-4 shadow-2xl">
+      <h3 class="text-sm font-bold text-white">ステルスモードを解除しますか？</h3>
+      <p class="text-xs text-gray-400 leading-relaxed">ボイスレコーダーの録音一覧および要約表示画面に戻ります。</p>
+      <div class="flex gap-2">
+        <button id="cancel-exit-stealth" class="flex-1 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-medium">キャンセル</button>
+        <button id="confirm-exit-stealth" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold">解除する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 計算メモ編集モーダル -->
+  <div id="memo-edit-modal" class="hidden fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl max-w-xs w-full p-4 space-y-3 shadow-2xl">
+      <h3 class="text-sm font-bold text-white">計算メモの編集</h3>
+      <input type="text" id="memo-edit-input" placeholder="例: 交通費、見積り..." class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white">
+      <div class="flex gap-2">
+        <button id="cancel-memo-btn" class="flex-1 py-1.5 bg-gray-800 text-gray-300 rounded-lg text-xs">キャンセル</button>
+        <button id="save-memo-btn" class="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- JavaScript メインロジック                                 -->
+  <!-- ======================================================== -->
+  <script>
+    // --- 状態管理 ---
+    let mediaRecorder = null;
+    let audioStream = null;
+    let audioContext = null;
+    let analyserNode = null;
+    let recordingChunks = [];
+    let isRecording = false;
+    let recordingTimerInterval = null;
+    let recordingStartTime = 0;
+    let db = null;
+    let calculationHistory = [];
+    let selectedHistoryIndexForMemo = null;
+
+    // --- DOM要素キャッシュ ---
+    const normalModeView = document.getElementById('normal-mode-view');
+    const stealthCalcView = document.getElementById('stealth-calc-view');
+    const gotoCalcBtn = document.getElementById('goto-calc-btn');
+    const stealthTitle = document.getElementById('stealth-title');
+    const exitStealthModal = document.getElementById('exit-stealth-modal');
+    const cancelExitStealth = document.getElementById('cancel-exit-stealth');
+    const confirmExitStealth = document.getElementById('confirm-exit-stealth');
+
+    const toggleSettingsBtn = document.getElementById('toggle-settings-btn');
+    const closeSettingsBtn = document.getElementById('close-settings-btn');
+    const settingsPanel = document.getElementById('settings-panel');
+    const customApiKeyInput = document.getElementById('custom-api-key');
+    const saveApiKeyBtn = document.getElementById('save-api-key-btn');
+    const wifiOnlyToggle = document.getElementById('wifi-only-toggle');
+    const silenceCutToggle = document.getElementById('silence-cut-toggle');
+
+    const recordBtn = document.getElementById('record-btn');
+    const recordBtnIcon = document.getElementById('record-btn-icon');
+    const recordingTimer = document.getElementById('recording-timer');
+    const recordingStatus = document.getElementById('recording-status');
+    const waveformCanvas = document.getElementById('waveform-canvas');
+    const waveformPlaceholder = document.getElementById('waveform-placeholder');
+
+    const toggleListBtn = document.getElementById('toggle-list-btn');
+    const recordingsContainer = document.getElementById('recordings-container');
+    const recordingsCountBadge = document.getElementById('recordings-count-badge');
+    const listToggleArrow = document.getElementById('list-toggle-arrow');
+
+    // 電卓用
+    const calcFormula = document.getElementById('calc-formula');
+    const calcDisplayDigits = document.getElementById('calc-display-digits');
+    const calcStealthDot = document.getElementById('calc-stealth-dot');
+    const calcPercentBtn = document.getElementById('calc-percent-btn');
+    const calcHistoryBtn = document.getElementById('calc-history-btn');
+    const calcHistoryDrawer = document.getElementById('calc-history-drawer');
+    const closeCalcHistoryBtn = document.getElementById('close-calc-history-btn');
+    const clearCalcHistoryBtn = document.getElementById('clear-calc-history-btn');
+    const calcHistoryList = document.getElementById('calc-history-list');
+    const fullscreenToggleBtn = document.getElementById('fullscreen-toggle-btn');
+    const toggleScientificBtn = document.getElementById('toggle-scientific-btn');
+    const scientificKeys = document.getElementById('scientific-keys');
+    const calcBackspaceBtn = document.getElementById('calc-backspace-btn');
+
+    const memoEditModal = document.getElementById('memo-edit-modal');
+    const memoEditInput = document.getElementById('memo-edit-input');
+    const cancelMemoBtn = document.getElementById('cancel-memo-btn');
+    const saveMemoBtn = document.getElementById('save-memo-btn');
+
+    const exportBackupBtn = document.getElementById('export-backup-btn');
+    const importBackupFile = document.getElementById('import-backup-file');
+    const backupPassword = document.getElementById('backup-password');
+
+    // ==========================================
+    // IndexedDB 初期化 (完全端末内保存)
+    // ==========================================
+    function initDatabase() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('SmartVoiceCalcDB', 2);
+        req.onupgradeneeded = (e) => {
+          const database = e.target.result;
+          if (!database.objectStoreNames.contains('recordings')) {
+            database.createObjectStore('recordings', { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = (e) => {
+          db = e.target.result;
+          loadSavedRecordings();
+          resolve(db);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // ==========================================
+    // 電卓ロジック (万能電卓)
+    // ==========================================
+    let currentFormula = '';
+    let currentResult = '0';
+    let percentClickTimer = null;
+    let isCalculated = false;
+
+    function updateCalcDisplay() {
+      calcFormula.textContent = currentFormula || '';
+      calcDisplayDigits.textContent = currentResult || '0';
+    }
+
+    function evaluateFormula() {
+      if (!currentFormula) return;
+      try {
+        let expr = currentFormula
+          .replace(/×/g, '*')
+          .replace(/÷/g, '/')
+          .replace(/sin\(/g, 'Math.sin(')
+          .replace(/cos\(/g, 'Math.cos(')
+          .replace(/tan\(/g, 'Math.tan(')
+          .replace(/√\(/g, 'Math.sqrt(')
+          .replace(/\^/g, '**');
+
+        const res = Function(`'use strict'; return (${expr})`)();
+        if (isFinite(res)) {
+          currentResult = String(Number(res.toFixed(10)));
+        }
+      } catch (e) {
+        // 式入力途中の構文エラーは無視
+      }
+    }
+
+    document.querySelectorAll('.calc-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.key;
+        handleCalcKey(key);
+      });
+    });
+
+    document.querySelectorAll('.calc-sci-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentFormula += btn.dataset.val;
+        evaluateFormula();
+        updateCalcDisplay();
+      });
+    });
+
+    function handleCalcKey(key) {
+      if (key === 'C') {
+        currentFormula = '';
+        currentResult = '0';
+        isCalculated = false;
+      } else if (key === '=') {
+        if (!currentFormula) return;
+        evaluateFormula();
+        calculationHistory.unshift({
+          formula: currentFormula,
+          result: currentResult,
+          memo: '',
+          date: new Date().toLocaleDateString()
+        });
+        currentFormula = currentResult;
+        isCalculated = true;
+      } else if (key === '()') {
+        const openCount = (currentFormula.match(/\(/g) || []).length;
+        const closeCount = (currentFormula.match(/\)/g) || []).length;
+        currentFormula += (openCount > closeCount) ? ')' : '(';
+        evaluateFormula();
+      } else {
+        if (isCalculated && ['+', '-', '×', '÷'].includes(key)) {
+          isCalculated = false;
+        } else if (isCalculated) {
+          currentFormula = '';
+          isCalculated = false;
+        }
+        currentFormula += key;
+        evaluateFormula();
+      }
+      updateCalcDisplay();
+    }
+
+    calcBackspaceBtn.addEventListener('click', () => {
+      currentFormula = currentFormula.slice(0, -1);
+      if (!currentFormula) currentResult = '0';
+      else evaluateFormula();
+      updateCalcDisplay();
+    });
+
+    // 「%」ダブルタップ判定 (450ms待機)
+    calcPercentBtn.addEventListener('click', () => {
+      if (percentClickTimer) {
+        // ダブルタップ検知 -> 録音トグル (数式は変更しない)
+        clearTimeout(percentClickTimer);
+        percentClickTimer = null;
+        toggleRecording();
+      } else {
+        // 1回目のタップ -> 待機
+        percentClickTimer = setTimeout(() => {
+          percentClickTimer = null;
+          currentFormula += '/100';
+          evaluateFormula();
+          updateCalcDisplay();
+        }, 450);
+      }
+    });
+
+    toggleScientificBtn.addEventListener('click', () => {
+      scientificKeys.classList.toggle('hidden');
+    });
+
+    // ==========================================
+    // ステルスモード切替＆解除長押し
+    // ==========================================
+    let titlePressTimer = null;
+    stealthTitle.addEventListener('touchstart', startTitleHold, { passive: true });
+    stealthTitle.addEventListener('touchend', endTitleHold);
+    stealthTitle.addEventListener('mousedown', startTitleHold);
+    stealthTitle.addEventListener('mouseup', endTitleHold);
+
+    function startTitleHold() {
+      titlePressTimer = setTimeout(() => {
+        exitStealthModal.classList.remove('hidden');
+      }, 750);
+    }
+    function endTitleHold() {
+      if (titlePressTimer) clearTimeout(titlePressTimer);
+    }
+
+    cancelExitStealth.addEventListener('click', () => {
+      exitStealthModal.classList.add('hidden');
+    });
+    confirmExitStealth.addEventListener('click', () => {
+      exitStealthModal.classList.add('hidden');
+      stealthCalcView.classList.add('hidden');
+      normalModeView.classList.remove('hidden');
+    });
+
+    gotoCalcBtn.addEventListener('click', () => {
+      stealthCalcView.classList.remove('hidden');
+      normalModeView.classList.add('hidden');
+    });
+
+    fullscreenToggleBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    // ==========================================
+    // 録音ロジック (無音カット・MP3化・Gemini要約)
+    // ==========================================
+    async function toggleRecording() {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    }
+
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioStream = stream;
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyserNode = audioContext.createAnalyser();
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyserNode);
+
+        recordingChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordingChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = processRecordingAfterStop;
+        mediaRecorder.start(100);
+
+        isRecording = true;
+        recordingStartTime = Date.now();
+        updateRecordingUI(true);
+        drawWaveform();
+      } catch (err) {
+        console.error('マイクアクセスエラー:', err);
+      }
+    }
+
+    function stopRecording() {
+      if (!mediaRecorder || !isRecording) return;
+      mediaRecorder.stop();
+      if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+      isRecording = false;
+      updateRecordingUI(false);
+    }
+
+    function updateRecordingUI(recording) {
+      if (recording) {
+        recordBtnIcon.className = 'w-6 h-6 rounded-sm bg-white';
+        recordingStatus.textContent = '● 録音中...';
+        recordingStatus.className = 'text-xs text-rose-500 font-bold mt-1';
+        calcStealthDot.className = 'text-rose-600 font-bold transition-colors duration-300';
+        waveformPlaceholder.classList.add('hidden');
+
+        recordingTimerInterval = setInterval(() => {
+          const sec = Math.floor((Date.now() - recordingStartTime) / 1000);
+          const m = String(Math.floor(sec / 60)).padStart(2, '0');
+          const s = String(sec % 60).padStart(2, '0');
+          recordingTimer.textContent = `${m}:${s}`;
+        }, 500);
+      } else {
+        recordBtnIcon.className = 'w-7 h-7 rounded-full bg-white';
+        recordingStatus.textContent = '停止 (処理中...)';
+        recordingStatus.className = 'text-xs text-gray-400 mt-1';
+        calcStealthDot.className = 'text-gray-700 transition-colors duration-300';
+        waveformPlaceholder.classList.remove('hidden');
+        if (recordingTimerInterval) clearInterval(recordingTimerInterval);
+      }
+    }
+
+    // 波形モニター描画
+    function drawWaveform() {
+      if (!isRecording || !analyserNode) return;
+      const ctx = waveformCanvas.getContext('2d');
+      const bufferLength = analyserNode.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyserNode.getByteTimeDomainData(dataArray);
+
+      ctx.fillStyle = '#030712';
+      ctx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#10b981';
+      ctx.beginPath();
+
+      const sliceWidth = waveformCanvas.width / bufferLength;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * waveformCanvas.height) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.stroke();
+      requestAnimationFrame(drawWaveform);
+    }
+
+    // 録音完了後の処理
+    async function processRecordingAfterStop() {
+      const rawBlob = new Blob(recordingChunks, { type: 'audio/webm' });
+      const arrayBuffer = await rawBlob.arrayBuffer();
+      const decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      // 無音カット
+      let finalAudioBuffer = decodedBuffer;
+      if (silenceCutToggle.checked) {
+        finalAudioBuffer = cutSilence(decodedBuffer);
+      }
+
+      // MP3 エンコード
+      const mp3Blob = encodeToMp3(finalAudioBuffer);
+      const recordId = 'rec_' + Date.now();
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const filename = `録音_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+      const newRecord = {
+        id: recordId,
+        filename: filename,
+        date: now.toLocaleString(),
+        audioBlob: mp3Blob,
+        summary: null,
+        topics: [],
+        fullTranscript: '',
+        status: 'pending'
+      };
+
+      await saveRecordToDb(newRecord);
+      renderRecordCard(newRecord);
+      recordingStatus.textContent = '待機中 (保存完了)';
+
+      // Wi-Fi判定およびGemini要約トリガー
+      checkAndTriggerSummary(newRecord);
+    }
+
+    // 無音自動カット
+    function cutSilence(buffer) {
+      const channelData = buffer.getChannelData(0);
+      const threshold = 0.02;
+      let start = 0;
+      let end = channelData.length - 1;
+
+      while (start < channelData.length && Math.abs(channelData[start]) < threshold) start++;
+      while (end > start && Math.abs(channelData[end]) < threshold) end--;
+
+      if (start >= end) return buffer;
+      const cutLength = end - start;
+      const newBuffer = audioContext.createBuffer(buffer.numberOfChannels, cutLength, buffer.sampleRate);
+      for (let c = 0; c < buffer.numberOfChannels; c++) {
+        newBuffer.copyToChannel(buffer.getChannelData(c).subarray(start, end), c);
+      }
+      return newBuffer;
+    }
+
+    // MP3 エンコード (lamejs)
+    function encodeToMp3(audioBuffer) {
+      const channels = audioBuffer.numberOfChannels;
+      const sampleRate = audioBuffer.sampleRate;
+      const mp3encoder = new lamejs.Mp3Encoder(1, sampleRate, 128);
+      const samples = audioBuffer.getChannelData(0);
+      const sampleCount = samples.length;
+      const sampleInt16 = new Int16Array(sampleCount);
+
+      for (let i = 0; i < sampleCount; i++) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        sampleInt16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+
+      const mp3Data = [];
+      const blockSize = 1152;
+      for (let i = 0; i < sampleCount; i += blockSize) {
+        const chunk = sampleInt16.subarray(i, i + blockSize);
+        const mp3buf = mp3encoder.encodeBuffer(chunk);
+        if (mp3buf.length > 0) mp3Data.push(mp3buf);
+      }
+      const endBuf = mp3encoder.flush();
+      if (endBuf.length > 0) mp3Data.push(endBuf);
+
+      return new Blob(mp3Data, { type: 'audio/mp3' });
+    }
+
+    // ==========================================
+    // Gemini APIによる要約 & 文字起こし
+    // ==========================================
+    async function checkAndTriggerSummary(record) {
+      const isWifiOnly = wifiOnlyToggle.checked;
+      const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      const isWifi = connection ? (connection.type === 'wifi' || connection.effectiveType === '4g') : true;
+
+      if (isWifiOnly && !isWifi) {
+        updateCardStatus(record.id, 'Wi-Fi待機中 (接続後に自動解析)');
+        return;
+      }
+      runGeminiSummary(record);
+    }
+
+    async function runGeminiSummary(record) {
+      updateCardStatus(record.id, 'AI要約・文字起こし中...');
+      const apiKey = customApiKeyInput.value.trim();
+
+      if (!apiKey) {
+        updateCardStatus(record.id, 'APIキー未設定 (右上の歯車アイコンからキーを入力してください)', true);
+        return;
+      }
+
+      try {
+        const base64Audio = await blobToBase64(record.audioBlob);
+        const prompt = `この音声データを分析し、以下のJSON形式のみで出力してください。
+{
+  "summary": "全体の簡潔な要約（2〜3文）",
+  "topics": [
+    { "timestamp": "00:00", "title": "トピック見出し", "description": "トピック要約" }
+  ],
+  "fullTranscript": "全文文字起こし"
+}`;
+
+        const payload = {
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: 'audio/mp3', data: base64Audio } }
+            ]
+          }],
+          generationConfig: { responseMimeType: "application/json" }
+        };
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error(`APIリクエスト失敗 (${res.status})`);
+        const result = await res.json();
+        const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = JSON.parse(jsonText);
+
+        record.summary = parsed.summary;
+        record.topics = parsed.topics || [];
+        record.fullTranscript = parsed.fullTranscript || '';
+        record.status = 'completed';
+
+        await saveRecordToDb(record);
+        renderRecordCard(record);
+      } catch (err) {
+        console.error('Gemini要約エラー:', err);
+        updateCardStatus(record.id, `要約失敗: ${err.message}`, true);
+      }
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    // ==========================================
+    // UIカード描画 & IndexedDB
+    // ==========================================
+    function saveRecordToDb(record) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('recordings', 'readwrite');
+        tx.objectStore('recordings').put(record);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function loadSavedRecordings() {
+      const tx = db.transaction('recordings', 'readonly');
+      const store = tx.objectStore('recordings');
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const records = req.result.sort((a, b) => b.id.localeCompare(a.id));
+        recordingsContainer.innerHTML = '';
+        records.forEach(renderRecordCard);
+        recordingsCountBadge.textContent = `${records.length}件`;
+      };
+    }
+
+    function renderRecordCard(record) {
+      let card = document.getElementById(record.id);
+      if (!card) {
+        card = document.createElement('div');
+        card.id = record.id;
+        card.className = 'bg-gray-950 border border-gray-800 rounded-xl p-3.5 space-y-3';
+        recordingsContainer.prepend(card);
+      }
+
+      const audioUrl = URL.createObjectURL(record.audioBlob);
+      card.innerHTML = `
+        <div class="flex items-center justify-between">
+          <div class="text-xs font-bold text-gray-200">${record.filename}</div>
+          <div class="flex items-center space-x-2">
+            <a href="${audioUrl}" download="${record.filename}.mp3" class="text-[11px] px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-sky-400 rounded border border-gray-700">MP3保存</a>
+            <button onclick="deleteRecord('${record.id}')" class="text-xs text-gray-500 hover:text-rose-400">🗑</button>
+          </div>
+        </div>
+        <audio id="audio-${record.id}" src="${audioUrl}" controls class="w-full h-8"></audio>
+
+        <div id="status-${record.id}" class="text-[11px] text-gray-400">
+          ${record.status === 'completed' ? `
+            <div class="space-y-2 mt-2">
+              <div class="bg-gray-900/90 rounded-lg p-2.5 border border-gray-800">
+                <span class="text-emerald-400 font-bold block mb-1">【要約】</span>
+                <p class="text-xs text-gray-300 leading-relaxed">${escapeHtml(record.summary)}</p>
+              </div>
+
+              ${record.topics && record.topics.length ? `
+                <div class="space-y-1">
+                  <span class="text-[10px] text-gray-500 font-semibold">トピック (タップでシーク再生):</span>
+                  ${record.topics.map(t => `
+                    <div onclick="seekAudio('audio-${record.id}', '${t.timestamp}')" class="flex items-start gap-2 p-1.5 rounded-lg bg-gray-900/60 hover:bg-gray-800 cursor-pointer border border-gray-800/60 transition">
+                      <span class="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono text-[10px]">${t.timestamp}</span>
+                      <span class="text-xs text-gray-300 flex-1">${escapeHtml(t.title)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
+
+              <details class="bg-gray-900/40 rounded-lg p-2 border border-gray-800">
+                <summary class="cursor-pointer text-[11px] text-gray-400 flex items-center justify-between">
+                  <span>文字起こし全文</span>
+                  <button onclick="copyTranscript(event, '${record.id}')" class="text-[10px] px-2 py-0.5 bg-gray-800 text-emerald-400 rounded">コピー</button>
+                </summary>
+                <p id="transcript-${record.id}" class="text-xs text-gray-400 mt-2 whitespace-pre-wrap leading-relaxed">${escapeHtml(record.fullTranscript)}</p>
+              </details>
+            </div>
+          ` : `
+            <div class="flex items-center justify-between pt-1">
+              <span>${record.status === 'pending' ? '要約待機中' : record.status}</span>
+              <button onclick="retrySummary('${record.id}')" class="text-xs text-emerald-400 underline">今すぐ解析</button>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function updateCardStatus(id, msg, isError = false) {
+      const statusEl = document.getElementById(`status-${id}`);
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="${isError ? 'text-rose-400' : 'text-gray-400'}">${msg}</span>
+            <button onclick="retrySummary('${id}')" class="text-xs text-emerald-400 underline">再試行</button>
+          </div>
+        `;
+      }
+    }
+
+    window.seekAudio = function(audioId, timestamp) {
+      const audio = document.getElementById(audioId);
+      if (!audio) return;
+      const parts = timestamp.split(':').map(Number);
+      const sec = parts.length === 2 ? parts[0] * 60 + parts[1] : 0;
+      audio.currentTime = sec;
+      audio.play();
+    };
+
+    window.copyTranscript = function(e, id) {
+      e.stopPropagation();
+      const el = document.getElementById(`transcript-${id}`);
+      if (!el) return;
+      const text = el.innerText;
+      const temp = document.createElement('textarea');
+      temp.value = text;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+      e.target.textContent = 'コピー完了!';
+      setTimeout(() => e.target.textContent = 'コピー', 2000);
+    };
+
+    window.deleteRecord = async function(id) {
+      const tx = db.transaction('recordings', 'readwrite');
+      tx.objectStore('recordings').delete(id);
+      tx.oncomplete = () => {
+        const card = document.getElementById(id);
+        if (card) card.remove();
+        loadSavedRecordings();
+      };
+    };
+
+    window.retrySummary = async function(id) {
+      const tx = db.transaction('recordings', 'readonly');
+      const req = tx.objectStore('recordings').get(id);
+      req.onsuccess = () => {
+        if (req.result) runGeminiSummary(req.result);
+      };
+    };
+
+    // 一覧アコーディオントグル
+    toggleListBtn.addEventListener('click', () => {
+      recordingsContainer.classList.toggle('hidden');
+      listToggleArrow.textContent = recordingsContainer.classList.contains('hidden') ? '▼' : '▲';
+    });
+
+    toggleSettingsBtn.addEventListener('click', () => settingsPanel.classList.toggle('hidden'));
+    closeSettingsBtn.addEventListener('click', () => settingsPanel.classList.add('hidden'));
+
+    saveApiKeyBtn.addEventListener('click', () => {
+      localStorage.setItem('gemini_api_key', customApiKeyInput.value.trim());
+      saveApiKeyBtn.textContent = '保存完了!';
+      setTimeout(() => saveApiKeyBtn.textContent = '保存', 1500);
+    });
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ==========================================
+    // アプリ起動時の初期化
+    // ==========================================
+    window.addEventListener('load', () => {
+      // APIキー復元
+      const savedKey = localStorage.getItem('gemini_api_key');
+      if (savedKey) customApiKeyInput.value = savedKey;
+
+      // キャンバス解像度調整
+      waveformCanvas.width = waveformCanvas.offsetWidth || 350;
+      waveformCanvas.height = waveformCanvas.offsetHeight || 96;
+
+      // データベース起動
+      initDatabase();
+    });
+  </script>
+</body>
+</html>

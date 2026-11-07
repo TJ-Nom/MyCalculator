@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>万能電卓</title>
   
-  <!-- Web App Manifest (インラインBlob生成) -->
+  <!-- Web App Manifest (インラインBlob生成: standalone) -->
   <link rel="manifest" id="manifest-placeholder">
   <meta name="theme-color" content="#121212">
   <meta name="mobile-web-app-capable" content="yes">
@@ -18,7 +18,10 @@
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 
   <style>
-    body {
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
       background-color: #121212;
       color: #ffffff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -45,12 +48,12 @@
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between overflow-x-hidden">
+<body class="flex flex-col justify-between">
 
   <!-- ========================================== -->
   <!-- 1. ステルス電卓画面 (初期表示モード) -->
   <!-- ========================================== -->
-  <div id="calculator-view" class="flex-1 flex flex-col justify-between max-w-md mx-auto w-full p-4 h-screen">
+  <div id="calculator-view" class="flex-1 flex flex-col justify-between max-w-md mx-auto w-full p-4 h-full">
     
     <!-- 電卓ヘッダー -->
     <div class="flex items-center justify-between py-2 border-b border-gray-800 text-gray-400">
@@ -62,8 +65,8 @@
         <span id="stealth-title" class="font-semibold text-gray-200 select-none cursor-pointer tracking-wider px-2 py-1 rounded active:bg-gray-800">万能電卓</span>
       </div>
       <div class="flex items-center space-x-3">
-        <!-- 最大化 / 全画面切り替えボタン -->
-        <button id="calc-fullscreen-btn" class="p-1 hover:text-white" title="全画面表示切替">
+        <!-- 最大化 / 画面フィットボタン（OS警告の出るrequestFullscreenは呼ばない） -->
+        <button id="calc-fullscreen-btn" class="p-1 hover:text-white" title="画面フィット切替">
           <svg id="fullscreen-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
           </svg>
@@ -91,39 +94,33 @@
       <div id="calc-sub-display" class="text-gray-400 text-sm h-6 overflow-hidden font-mono tracking-wide"></div>
       <div class="flex items-baseline justify-end space-x-1">
         <span id="calc-main-display" class="text-5xl font-light tracking-tight font-mono text-white break-all">0</span>
-        <!-- ステルス録音インジケーター（通常の小数点ドットに見せかける） -->
+        <!-- ステルス録音インジケーター -->
         <span id="stealth-rec-indicator" class="recording-dot w-2 h-2 rounded-full bg-transparent mb-1"></span>
       </div>
     </div>
 
     <!-- 電卓キーパッド -->
     <div class="grid grid-cols-4 gap-2 pb-6">
-      <!-- 1行目 -->
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcAction('clear')">C</button>
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcAction('paren')">()</button>
-      <!-- ％ボタン：シングルタップで%計算、素早いダブルタップで録音ON/OFF -->
       <button id="btn-percent" class="stealth-btn bg-amber-600 active:bg-amber-500 text-white text-xl font-medium p-4 rounded-2xl" onclick="handlePercentTap()">%</button>
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('/')">÷</button>
 
-      <!-- 2行目 -->
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('7')">7</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('8')">8</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('9')">9</button>
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('*')">×</button>
 
-      <!-- 3行目 -->
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('4')">4</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('5')">5</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('6')">6</button>
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('-')">-</button>
 
-      <!-- 4行目 -->
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('1')">1</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('2')">2</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('3')">3</button>
       <button class="stealth-btn bg-gray-800 text-emerald-400 text-xl font-medium p-4 rounded-2xl" onclick="calcInput('+')">+</button>
 
-      <!-- 5行目 -->
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('0')">0</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('00')">00</button>
       <button class="stealth-btn bg-gray-900 text-white text-2xl font-light p-4 rounded-2xl" onclick="calcInput('.')">.</button>
@@ -135,7 +132,7 @@
   <!-- ========================================== -->
   <!-- 2. ボイスレコーダー＆文字起こし管理画面 -->
   <!-- ========================================== -->
-  <div id="recorder-view" class="hidden flex-1 max-w-lg mx-auto w-full p-4 flex-col space-y-4">
+  <div id="recorder-view" class="hidden flex-1 max-w-lg mx-auto w-full p-4 flex-col space-y-4 overflow-y-auto">
     
     <!-- 管理ヘッダー -->
     <div class="flex items-center justify-between pb-3 border-b border-gray-800">
@@ -149,18 +146,16 @@
         </div>
       </div>
       <div class="flex items-center space-x-2">
-        <!-- 電卓（ステルス）に戻るボタン -->
         <button id="btn-return-calc" class="p-2 text-gray-400 hover:text-white rounded-lg bg-gray-800 border border-gray-700" title="電卓画面へ">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
         </button>
-        <!-- 設定ボタン -->
         <button id="btn-open-settings" class="p-2 text-gray-400 hover:text-white rounded-lg bg-gray-800 border border-gray-700" title="設定">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         </button>
       </div>
     </div>
 
-    <!-- 設定パネル（アコーディオン） -->
+    <!-- 設定パネル -->
     <div id="settings-panel" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4 text-sm">
       <div class="flex justify-between items-center pb-2 border-b border-gray-800">
         <span class="font-semibold text-gray-200">各種設定</span>
@@ -202,14 +197,11 @@
       </div>
     </div>
 
-    <!-- 録音コントロール（手動操作エリア） -->
+    <!-- 録音コントロール -->
     <div class="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center space-y-3">
-      <!-- 波形モニター -->
       <div class="w-full bg-gray-950 rounded-xl h-14 flex items-center justify-center px-4 overflow-hidden border border-gray-800">
         <canvas id="waveform-canvas" class="w-full h-10"></canvas>
       </div>
-
-      <!-- 録音ボタン -->
       <div class="flex items-center space-x-4">
         <button id="btn-main-record" class="w-16 h-16 rounded-full bg-red-600 hover:bg-red-500 active:scale-95 flex items-center justify-center shadow-lg transition-transform">
           <div id="rec-btn-icon" class="w-6 h-6 rounded-sm bg-white"></div>
@@ -219,12 +211,12 @@
     </div>
 
     <!-- 録音・要約リスト一覧 -->
-    <div class="space-y-3 flex-1 overflow-y-auto">
+    <div class="space-y-3 flex-1">
       <div class="flex justify-between items-center text-xs text-gray-400 px-1">
         <span>録音・要約一覧 (端末内IndexedDB)</span>
         <span id="recordings-count">0 件</span>
       </div>
-      <div id="recordings-list" class="space-y-3">
+      <div id="recordings-list" class="space-y-3 pb-6">
         <!-- 録音カードが動的に挿入されます -->
       </div>
     </div>
@@ -236,9 +228,6 @@
   <!-- 3. JavaScript ロジック -->
   <!-- ========================================== -->
   <script>
-    // ----------------------------------------------------
-    // グローバル状態
-    // ----------------------------------------------------
     let db = null;
     let audioStream = null;
     let audioContext = null;
@@ -249,16 +238,13 @@
     let analyserNode = null;
     let animFrameId = null;
 
-    // 電卓状態
     let calcState = {
       display: '0',
       subDisplay: '',
       history: []
     };
 
-    // ----------------------------------------------------
-    // PWA Manifest（インライン生成）
-    // ----------------------------------------------------
+    // PWA Manifest（standalone指定）
     (function setupPwa() {
       const manifest = {
         name: "万能電卓",
@@ -280,27 +266,17 @@
       if (manifestLink) manifestLink.setAttribute('href', manifestUrl);
     })();
 
-    // ----------------------------------------------------
-    // 全画面表示（最大化）トグル処理
-    // ----------------------------------------------------
+    // 画面フィットボタン（requestFullscreenを呼ばずに画面スクロール位置とUI高さを最適化）
     const fullscreenBtn = document.getElementById('calc-fullscreen-btn');
     if (fullscreenBtn) {
       fullscreenBtn.addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-          if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(() => {});
-          }
-        } else {
-          if (document.exitFullscreen) {
-            document.exitFullscreen().catch(() => {});
-          }
-        }
+        window.scrollTo(0, 1);
+        const calcView = document.getElementById('calculator-view');
+        calcView.style.height = `${window.innerHeight}px`;
       });
     }
 
-    // ----------------------------------------------------
     // IndexedDB の初期化
-    // ----------------------------------------------------
     function initDB() {
       return new Promise((resolve, reject) => {
         const req = indexedDB.open('StealthVoiceCalcDB', 1);
@@ -319,9 +295,7 @@
       });
     }
 
-    // ----------------------------------------------------
     // 電卓ロジック
-    // ----------------------------------------------------
     function updateCalcDisplay() {
       document.getElementById('calc-main-display').textContent = calcState.display;
       document.getElementById('calc-sub-display').textContent = calcState.subDisplay;
@@ -392,9 +366,7 @@
       list.innerHTML = calcState.history.map(item => `<div>${escapeHtml(item)}</div>`).join('');
     }
 
-    // ----------------------------------------------------
     // ステルス切り替え制御
-    // ----------------------------------------------------
     let pressTimer = null;
     const titleEl = document.getElementById('stealth-title');
 
@@ -445,9 +417,7 @@
       renderCalcHistory();
     });
 
-    // ----------------------------------------------------
     // 録音 & 音声処理
-    // ----------------------------------------------------
     async function toggleStealthRecording() {
       if (isRecording) {
         stopRecording();
@@ -522,9 +492,7 @@
       animFrameId = requestAnimationFrame(drawWaveform);
     }
 
-    // ----------------------------------------------------
     // MP3 エンコード & 無音カット & 保存
-    // ----------------------------------------------------
     async function handleRecordingComplete() {
       const rawBlob = new Blob(recordedChunks, { type: 'audio/webm' });
       const now = new Date();
@@ -606,9 +574,7 @@
       return new Blob(mp3Data, { type: 'audio/mp3' });
     }
 
-    // ----------------------------------------------------
     // Gemini API 要約 & 文字起こし
-    // ----------------------------------------------------
     async function requestGeminiSummary(item) {
       const apiKey = localStorage.getItem('gemini_api_key') || '';
       const model = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
@@ -684,9 +650,7 @@
       });
     }
 
-    // ----------------------------------------------------
     // UI レンダリング & DB連携
-    // ----------------------------------------------------
     function saveRecordToDB(item) {
       return new Promise((resolve, reject) => {
         const tx = db.transaction('recordings', 'readwrite');
@@ -837,9 +801,7 @@
       });
     }
 
-    // ----------------------------------------------------
     // 設定パネル制御
-    // ----------------------------------------------------
     document.getElementById('btn-open-settings').addEventListener('click', () => {
       document.getElementById('settings-panel').classList.remove('hidden');
       document.getElementById('input-api-key').value = localStorage.getItem('gemini_api_key') || '';
@@ -859,9 +821,7 @@
       document.getElementById('settings-panel').classList.add('hidden');
     });
 
-    // ----------------------------------------------------
     // 暗号化バックアップ (AES-256) & 復元
-    // ----------------------------------------------------
     document.getElementById('btn-export-backup').addEventListener('click', async () => {
       const password = document.getElementById('input-backup-pass').value;
       if (!password) {
@@ -1004,9 +964,7 @@
         .replace(/"/g, '&quot;');
     }
 
-    // ----------------------------------------------------
     // 初期化実行
-    // ----------------------------------------------------
     (async function init() {
       await initDB();
       updateCalcDisplay();

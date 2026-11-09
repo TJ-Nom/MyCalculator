@@ -5,16 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>万能電卓</title>
   
-  <!-- Web App Manifest -->
   <link rel="manifest" id="manifest-placeholder">
   <meta name="theme-color" content="#121212">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- LameJS (MP3エンコード用) -->
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 
   <style>
@@ -61,17 +58,22 @@
         <button id="calc-menu-btn" class="p-1 hover:text-white" title="メニュー">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
         </button>
-        <!-- タイトル長押しでステルス解除 -->
+        <!-- タイトル長押しで確認ダイアログを表示してステルス解除 -->
         <span id="stealth-title" class="font-semibold text-gray-200 select-none cursor-pointer tracking-wider px-2 py-1 rounded active:bg-gray-800">万能電卓</span>
       </div>
-      <div class="flex items-center space-x-3">
+      <div class="flex items-center space-x-2">
+        <!-- BackSpaceボタン（ヘッダー右側） -->
+        <button id="calc-backspace-btn" class="p-1.5 hover:text-white text-gray-400 active:text-emerald-400" title="1文字削除">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414A2 2 0 0110.828 5H20a2 2 0 012 2v10a2 2 0 01-2 2h-9.172a2 2 0 01-1.414-.586L3 12z"></path></svg>
+        </button>
+        <!-- 計算履歴ボタン -->
         <button id="calc-history-toggle" class="p-1 hover:text-white" title="計算履歴">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </button>
       </div>
     </div>
 
-    <!-- スライドサイドメニュー -->
+    <!-- サイドメニュー -->
     <div id="side-menu-overlay" class="hidden absolute inset-0 bg-black/60 z-40 transition-opacity"></div>
     <div id="side-menu" class="absolute top-0 left-0 bottom-0 w-64 bg-gray-900 border-r border-gray-800 z-50 transform -translate-x-full transition-transform duration-200 flex flex-col justify-between p-4 shadow-2xl">
       <div class="space-y-4">
@@ -102,7 +104,7 @@
       </div>
     </div>
 
-    <!-- 電卓ディスプレイ -->
+    <!-- 電卓ディスプレイ（3桁区切りフォーマット表示） -->
     <div class="flex-1 flex flex-col justify-end py-2 px-2 text-right shrink min-h-0">
       <div id="calc-sub-display" class="text-gray-400 text-sm h-5 overflow-hidden font-mono tracking-wide"></div>
       <div class="flex items-baseline justify-end space-x-1">
@@ -303,7 +305,14 @@
 
     document.getElementById('menu-item-recorder').addEventListener('click', () => {
       closeSideMenu();
-      showView('recorder');
+      if (confirm("ボイスレコーダーの管理画面を開きますか？")) {
+        showView('recorder');
+      }
+    });
+
+    // BackSpaceボタン
+    document.getElementById('calc-backspace-btn').addEventListener('click', () => {
+      calcAction('backspace');
     });
 
     // IndexedDB の初期化
@@ -325,10 +334,20 @@
       });
     }
 
-    // 電卓ロジック
+    // 数値を3桁カンマ区切りにフォーマット（演算子や括弧、小数点を維持）
+    function formatCalculationExpression(expr) {
+      if (!expr) return '0';
+      // 数値ブロック（整数部・小数部）ごとにカンマを付与
+      return expr.replace(/(\d+)(\.\d*)?/g, (match, integerPart, decimalPart) => {
+        const formattedInt = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return formattedInt + (decimalPart || '');
+      });
+    }
+
+    // 電卓表示更新
     function updateCalcDisplay() {
-      document.getElementById('calc-main-display').textContent = calcState.display;
-      document.getElementById('calc-sub-display').textContent = calcState.subDisplay;
+      document.getElementById('calc-main-display').textContent = formatCalculationExpression(calcState.display);
+      document.getElementById('calc-sub-display').textContent = formatCalculationExpression(calcState.subDisplay);
     }
 
     function calcInput(char) {
@@ -344,6 +363,12 @@
       if (action === 'clear') {
         calcState.display = '0';
         calcState.subDisplay = '';
+      } else if (action === 'backspace') {
+        if (calcState.display.length > 1) {
+          calcState.display = calcState.display.slice(0, -1);
+        } else {
+          calcState.display = '0';
+        }
       } else if (action === 'paren') {
         const openCount = (calcState.display.match(/\(/g) || []).length;
         const closeCount = (calcState.display.match(/\)/g) || []).length;
@@ -356,7 +381,7 @@
         try {
           const expr = calcState.display.replace(/×/g, '*').replace(/÷/g, '/');
           const res = Function(`'use strict'; return (${expr})`)();
-          calcState.history.unshift(`${calcState.display} = ${res}`);
+          calcState.history.unshift(`${formatCalculationExpression(calcState.display)} = ${formatCalculationExpression(String(res))}`);
           if (calcState.history.length > 20) calcState.history.pop();
           calcState.subDisplay = `${calcState.display} =`;
           calcState.display = String(res);
@@ -396,13 +421,19 @@
       list.innerHTML = calcState.history.map(item => `<div>${escapeHtml(item)}</div>`).join('');
     }
 
-    // ステルス切り替え（長押し）
+    // ステルス切り替え（長押しで確認ダイアログを出してから遷移）
     let pressTimer = null;
     const titleEl = document.getElementById('stealth-title');
 
+    function triggerSecretTransition() {
+      if (confirm("ボイスレコーダーの管理画面を開きますか？")) {
+        showView('recorder');
+      }
+    }
+
     titleEl.addEventListener('touchstart', (e) => {
       pressTimer = setTimeout(() => {
-        showView('recorder');
+        triggerSecretTransition();
       }, 700);
     }, { passive: true });
 
@@ -412,7 +443,7 @@
 
     titleEl.addEventListener('mousedown', () => {
       pressTimer = setTimeout(() => {
-        showView('recorder');
+        triggerSecretTransition();
       }, 700);
     });
 
@@ -468,7 +499,7 @@
         };
         mediaRecorder.onstop = handleRecordingComplete;
 
-        mediaRecorder.start(250);
+        mediaRecorder.start(1000); // 1秒ごとにチャンク収集
         isRecording = true;
 
         document.getElementById('stealth-rec-indicator').classList.add('active');
@@ -492,7 +523,7 @@
 
       document.getElementById('stealth-rec-indicator').classList.remove('active');
       document.getElementById('rec-btn-icon').className = "w-6 h-6 rounded-sm bg-white";
-      document.getElementById('record-status-label').textContent = "音声エンコード中...";
+      document.getElementById('record-status-label').textContent = "音声を保存・処理中...";
     }
 
     document.getElementById('btn-main-record').addEventListener('click', () => {
@@ -518,7 +549,7 @@
       animFrameId = requestAnimationFrame(drawWaveform);
     }
 
-    // MP3 エンコード & 無音カット & 保存
+    // 録音完了時のフェイルセーフ保存（長時間録音クラッシュ防止）
     async function handleRecordingComplete() {
       const rawBlob = new Blob(recordedChunks, { type: 'audio/webm' });
       const now = new Date();
@@ -526,35 +557,63 @@
       const timestampStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
       const title = `録音_${timestampStr}`;
 
+      // 【安全策】まずWebMの生データを即座にIndexedDBへ登録（クラッシュしても録音が消えない）
+      const recordItem = {
+        title: title,
+        date: `${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
+        audioBlob: rawBlob,
+        mimeType: 'audio/webm',
+        sizeKb: Math.max(1, Math.round(rawBlob.size / 1024)),
+        durationSec: 0,
+        summary: null,
+        transcription: null,
+        status: 'pending'
+      };
+
+      let id = null;
+      try {
+        id = await saveRecordToDB(recordItem);
+        recordItem.id = id;
+        renderRecordCard(recordItem, true);
+      } catch (dbErr) {
+        console.error("IndexedDB Save Failed:", dbErr);
+      }
+
+      // MP3化と無音カットの試行（長時間録音でメモリ不足等になった場合は元のWebMのまま保持）
       try {
         const arrayBuffer = await rawBlob.arrayBuffer();
         const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
         const decodedBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+        recordItem.durationSec = Math.round(decodedBuffer.duration);
 
-        const trimmedBuffer = trimSilence(decodedBuffer, 0.02);
-        const mp3Blob = encodeToMp3(trimmedBuffer);
+        // 10分未満の録音のみ無音カットを実行（長時間はメモリ枯渇を避けるためスキップ）
+        let targetBuffer = decodedBuffer;
+        if (decodedBuffer.duration < 600) {
+          targetBuffer = trimSilence(decodedBuffer, 0.02);
+        }
 
-        const recordItem = {
-          title: title,
-          date: `${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
-          audioBlob: mp3Blob,
-          sizeKb: Math.max(1, Math.round(mp3Blob.size / 1024)),
-          durationSec: Math.max(1, Math.round(trimmedBuffer.duration)),
-          summary: null,
-          transcription: null,
-          status: 'pending'
-        };
+        const mp3Blob = encodeToMp3(targetBuffer);
+        recordItem.audioBlob = mp3Blob;
+        recordItem.mimeType = 'audio/mp3';
+        recordItem.sizeKb = Math.max(1, Math.round(mp3Blob.size / 1024));
 
-        const id = await saveRecordToDB(recordItem);
-        recordItem.id = id;
-        renderRecordCard(recordItem, true);
-
-        document.getElementById('record-status-label').textContent = "待機中 (電卓で「%」を素早いダブルタップ)";
-        requestGeminiSummary(recordItem);
-      } catch (err) {
-        console.error("Audio processing failed:", err);
-        document.getElementById('record-status-label').textContent = "音声処理エラー";
+        if (id) await updateRecordInDB(recordItem);
+        applyAudioUpdateToCard(recordItem);
+      } catch (audioErr) {
+        console.warn("MP3 conversion failed, keeping original WebM audio:", audioErr);
+        // MP3化に失敗してもWebMで再生・保存可能
       }
+
+      document.getElementById('record-status-label').textContent = "待機中 (電卓で「%」を素早いダブルタップ)";
+      
+      // オフライン判定：ネットに繋がっていない場合は要約を保留にする
+      if (!navigator.onLine) {
+        updateCardSummaryStatus(recordItem.id, "オフラインのため要約は保留されました（Wi-Fi復帰後に再試行ボタンを押してください）", true, recordItem);
+        return;
+      }
+
+      // Gemini要約へ
+      requestGeminiSummary(recordItem);
     }
 
     function trimSilence(buffer, threshold = 0.02) {
@@ -565,9 +624,7 @@
       while (start < channelData.length && Math.abs(channelData[start]) < threshold) start++;
       while (end > start && Math.abs(channelData[end]) < threshold) end--;
 
-      if (start >= end) {
-        return buffer; // 全体無音の場合はそのまま返す
-      }
+      if (start >= end) return buffer;
 
       const trimmedLength = Math.max(1, end - start);
       const newCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -604,15 +661,18 @@
       return new Blob(mp3Data, { type: 'audio/mp3' });
     }
 
-    // ----------------------------------------------------
-    // Gemini API 要約 & 文字起こし（エラー表示・耐障害性強化版）
-    // ----------------------------------------------------
+    // Gemini API 要約 & 文字起こし
     async function requestGeminiSummary(item) {
       const apiKey = (localStorage.getItem('gemini_api_key') || '').trim();
       let model = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
 
       if (!apiKey) {
-        updateCardSummaryStatus(item.id, "APIキーが保存されていません。右上の設定から入力してください。", true, item);
+        updateCardSummaryStatus(item.id, "APIキーが未登録です。設定画面からGemini APIキーを入力してください。", true, item);
+        return;
+      }
+
+      if (!navigator.onLine) {
+        updateCardSummaryStatus(item.id, "インターネットに接続されていません（Wi-Fi/モバイル通信復帰後に再試行可能）", true, item);
         return;
       }
 
@@ -620,16 +680,14 @@
 
       try {
         const base64Audio = await blobToBase64(item.audioBlob);
-        if (!base64Audio) {
-          throw new Error("音声データのBase64変換に失敗しました。");
-        }
+        if (!base64Audio) throw new Error("音声データの変換に失敗しました。");
 
-        const promptText = `あなたは有能な音声文字起こし・要約アシスタントです。
-提供された音声を忠実に日本語で文字起こしし、さらに要約してください。
+        const promptText = `あなたはプロの議事録アシスタントです。
+提供された音声を忠実に日本語で文字起こしし、要約してください。
 必ず以下のJSON形式のみを出力してください（Markdown記法やコードブロックは不要です）:
 {
-  "summary": "録音内容の要約（重要な論点や決定事項を200文字以内でまとめる）",
-  "transcription": "音声の完全な文字起こしテキスト"
+  "summary": "録音内容の全体要約（主要な決定事項や論点を整理）",
+  "transcription": "音声の文字起こし全文"
 }`;
 
         const payload = {
@@ -639,19 +697,16 @@
               { text: promptText },
               {
                 inline_data: {
-                  mime_type: "audio/mp3",
+                  mime_type: item.mimeType || "audio/mp3",
                   data: base64Audio
                 }
               }
             ]
           }],
-          generationConfig: {
-            temperature: 0.2
-          }
+          generationConfig: { temperature: 0.2 }
         };
 
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -671,9 +726,8 @@
 
         const data = await response.json();
         const candidate = data.candidates?.[0];
-        
         if (!candidate || !candidate.content) {
-          throw new Error("Geminiから有効な応答が得られませんでした (Block/Empty)。");
+          throw new Error("Geminiから有効な応答が得られませんでした。");
         }
 
         const rawText = candidate.content.parts?.[0]?.text || '';
@@ -685,8 +739,8 @@
           parsed = { summary: rawText.slice(0, 200), transcription: rawText };
         }
 
-        item.summary = parsed.summary || "要約の抽出が空でした";
-        item.transcription = parsed.transcription || "文字起こし結果が空でした";
+        item.summary = parsed.summary || "要約が取得できませんでした";
+        item.transcription = parsed.transcription || "文字起こしが取得できませんでした";
         item.status = 'completed';
         await updateRecordInDB(item);
 
@@ -705,7 +759,7 @@
             const base64 = reader.result.split(',')[1];
             resolve(base64 || '');
           } else {
-            reject(new Error("FileReader result is not a string"));
+            reject(new Error("FileReader result is not string"));
           }
         };
         reader.onerror = reject;
@@ -713,7 +767,7 @@
       });
     }
 
-    // UI レンダリング & DB連携
+    // IndexedDB 操作
     function saveRecordToDB(item) {
       return new Promise((resolve, reject) => {
         const tx = db.transaction('recordings', 'readwrite');
@@ -764,6 +818,7 @@
       card.className = "bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2 text-xs";
 
       const audioUrl = URL.createObjectURL(item.audioBlob);
+      const ext = (item.mimeType && item.mimeType.includes('webm')) ? 'webm' : 'mp3';
 
       card.innerHTML = `
         <div class="flex justify-between items-center text-gray-400">
@@ -779,13 +834,13 @@
           </div>
         </div>
 
-        <audio controls class="w-full h-8" src="${audioUrl}"></audio>
+        <audio id="audio-player-${item.id}" controls class="w-full h-8" src="${audioUrl}"></audio>
 
         <div class="flex justify-between items-center text-gray-400 text-[10px] pt-1">
-          <span>${item.sizeKb} KB · ${item.durationSec}秒</span>
-          <a href="${audioUrl}" download="${item.title}.mp3" class="text-indigo-400 hover:underline flex items-center space-x-1">
+          <span id="audio-meta-${item.id}">${item.sizeKb} KB · ${item.durationSec > 0 ? item.durationSec + '秒' : '処理済'}</span>
+          <a id="audio-download-${item.id}" href="${audioUrl}" download="${item.title}.${ext}" class="text-indigo-400 hover:underline flex items-center space-x-1">
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-            <span>MP3保存</span>
+            <span>${ext.toUpperCase()}保存</span>
           </a>
         </div>
 
@@ -798,6 +853,23 @@
         container.insertBefore(card, container.firstChild);
       } else {
         container.appendChild(card);
+      }
+    }
+
+    function applyAudioUpdateToCard(item) {
+      const audioUrl = URL.createObjectURL(item.audioBlob);
+      const player = document.getElementById(`audio-player-${item.id}`);
+      const meta = document.getElementById(`audio-meta-${item.id}`);
+      const download = document.getElementById(`audio-download-${item.id}`);
+      if (player) player.src = audioUrl;
+      if (meta) meta.textContent = `${item.sizeKb} KB · ${item.durationSec}秒`;
+      if (download) {
+        download.href = audioUrl;
+        download.download = `${item.title}.mp3`;
+        download.innerHTML = `
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+          <span>MP3保存</span>
+        `;
       }
     }
 
@@ -918,7 +990,8 @@
             summary: item.summary,
             transcription: item.transcription,
             status: item.status,
-            audioBase64: b64
+            audioBase64: b64,
+            mimeType: item.mimeType || 'audio/mp3'
           });
         }
 
@@ -964,7 +1037,8 @@
           const byteNumbers = new Array(byteCharacters.length);
           for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
           const byteArray = new Uint8Array(byteNumbers);
-          const audioBlob = new Blob([byteArray], { type: 'audio/mp3' });
+          const mime = r.mimeType || 'audio/mp3';
+          const audioBlob = new Blob([byteArray], { type: mime });
 
           store.add({
             title: r.title,
@@ -974,7 +1048,8 @@
             summary: r.summary,
             transcription: r.transcription,
             status: r.status,
-            audioBlob: audioBlob
+            audioBlob: audioBlob,
+            mimeType: mime
           });
         }
 

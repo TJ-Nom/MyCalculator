@@ -253,6 +253,21 @@
         <input type="checkbox" id="toggle-auto-blackout" checked class="w-4 h-4 accent-indigo-600 rounded cursor-pointer">
       </div>
 
+      <!-- URLバー・時計・バッテリー非表示（完全漆黒化）の案内 -->
+      <div class="p-3 bg-indigo-950/40 border border-indigo-800/60 rounded-lg space-y-1.5 text-xs">
+        <div class="font-semibold text-indigo-300 flex items-center space-x-1.5">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <span>URLバーや時計・電池残量も真っ黒にするには</span>
+        </div>
+        <p class="text-[11px] text-gray-300 leading-relaxed">
+          ブラウザの通常タブで開くとURLバーや上部の時計・バッテリー表示が残ります。<br>
+          Chrome右上のメニュー「<span class="text-white font-bold">︙</span>」から「<span class="text-emerald-400 font-bold">ホーム画面に追加</span>（アプリをインストール）」を行い、ホーム画面の「万能電卓」アイコンから起動すると、警告なしでURLバーもステータスバーも消えて完全に真っ黒になります。
+        </p>
+        <button type="button" id="btn-install-pwa" class="hidden w-full mt-1 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-1.5 rounded-lg text-xs shadow">
+          📲 ホーム画面に全画面アプリとして追加する
+        </button>
+      </div>
+
       <!-- 暗号化バックアップ & 復元 -->
       <div class="pt-2 border-t border-gray-800 space-y-2">
         <label class="block text-xs font-medium text-gray-300">暗号化バックアップ & 復元 (AES-256)</label>
@@ -654,13 +669,15 @@
       });
     }
 
-    // PWA Manifest
+    // PWA Manifest (display: "fullscreen" によりホーム画面起動時はURLバーと上部ステータスバーを両方非表示化)
+    let deferredInstallPrompt = null;
     (function setupPwa() {
       const manifest = {
         name: "万能電卓",
         short_name: "万能電卓",
         start_url: window.location.href.split('?')[0],
-        display: "standalone",
+        display: "fullscreen",
+        display_override: ["fullscreen", "standalone"],
         orientation: "portrait",
         background_color: "#000000",
         theme_color: "#000000",
@@ -675,6 +692,22 @@
       const manifestLink = document.getElementById('manifest-placeholder');
       if (manifestLink) manifestLink.setAttribute('href', manifestUrl);
     })();
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const installBtn = document.getElementById('btn-install-pwa');
+      if (installBtn) {
+        installBtn.classList.remove('hidden');
+        installBtn.onclick = async () => {
+          if (!deferredInstallPrompt) return;
+          deferredInstallPrompt.prompt();
+          await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = null;
+          installBtn.classList.add('hidden');
+        };
+      }
+    });
 
     // ネットワーク状態の表示更新とオンライン復帰イベント監視
     function updateNetworkBadge() {
@@ -1348,12 +1381,13 @@
 
 【重要ルール】
 1. 無音区間やノイズ、または「はい。はい。はい。」「うん、うん」といった意味のない相槌の連続は絶対に繰り返して出力しないでください（ループ厳禁）。
-2. 実質的な会話・議論の内容を忠実かつ読みやすい自然な日本語で文字起こししてください。
+2. 文字起こし全文（===TRANSCRIPTION===）には、発言や話題の区切りごとに必ず [00:00] や [05:32] のような経過時間のタイムスタンプ（[分:秒] または [時:分:秒]）を行頭に付けて改行しながら記述してください。
+3. 実質的な会話・議論の内容を忠実かつ読みやすい自然な日本語で文字起こししてください。
 
 ===SUMMARY===
 （ここに録音内容の全体要約・主要な決定事項・論点を整理して記述）
 ===TRANSCRIPTION===
-（ここに音声の文字起こし全文を記述）`;
+[00:00] （ここにタイムスタンプ付きの文字起こし全文を記述）`;
 
       let uploadedFileName = null;
 

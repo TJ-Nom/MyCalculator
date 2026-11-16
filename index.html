@@ -180,7 +180,7 @@
             <h1 class="text-base font-semibold leading-tight">スマートボイスレコーダー</h1>
             <span id="network-status-badge" class="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">オンライン</span>
           </div>
-          <p class="text-xs text-gray-400">端末内保存 / オンライン復帰時自動＆手動文字起こし対応</p>
+          <p class="text-xs text-gray-400">長時間音声対応 / ループ防止・自動＆手動文字起こし</p>
         </div>
       </div>
       <div class="flex items-center space-x-2">
@@ -300,6 +300,121 @@
       history: []
     };
 
+    // ====================================================
+    // 文字列クリーンアップ＆「はい。はい。」等のループ除去・JSON殻剥がし
+    // ====================================================
+    function cleanHallucinationLoops(text) {
+      if (!text) return '';
+      let cleaned = String(text);
+
+      // 1. 同一の短いフレーズ（1〜12文字＋句読点やスペース）が4回以上連続してループしている場合、2回分に圧縮
+      cleaned = cleaned.replace(/((?:[^。、！？\n\r]{1,12}[。、！？\s・]+))\1{3,}/g, '$1$1（…相槌・重複省略…）');
+
+      // 2. 句読点なしで同一の2〜8文字が6回以上連続している場合も圧縮
+      cleaned = cleaned.replace(/([^\s]{2,8})\1{5,}/g, '$1$1（…重複省略…）');
+
+      return cleaned.trim();
+    }
+
+    // 途切れたJSONや区切りタグ付きテキストから安全に summary と transcription を抽出する
+    function extractSummaryAndTranscription(rawText) {
+      if (!rawText) return { summary: '', transcription: '' };
+      const text = String(rawText).trim();
+
+      // パターンA: 新方式の ===SUMMARY=== / ===TRANSCRIPTION=== タグ形式
+      if (text.includes('===SUMMARY===') || text.includes('===TRANSCRIPTION===')) {
+        let sumPart = '';
+        let transPart = '';
+        const parts = text.split('===TRANSCRIPTION===');
+        sumPart = parts[0].replace('===SUMMARY===', '').trim();
+        transPart = (parts[1] || '').trim();
+        return {
+          summary: cleanHallucinationLoops(sumPart),
+          transcription: cleanHallucinationLoops(transPart)
+        };
+      }
+
+      // パターンB: 完全なJSONとしてパースできる場合
+      const strippedCode = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      try {
+        const parsed = JSON.parse(strippedCode);
+        if (parsed && (parsed.summary || parsed.transcription)) {
+          return {
+            summary: cleanHallucinationLoops(parsed.summary || ''),
+            transcription: cleanHallucinationLoops(parsed.transcription || '')
+          };
+        }
+      } catch (e) {
+        // JSONが途中で切れている場合は下の正規表現抽出へ進む
+      }
+
+      // パターンC: 途中で切れた不完全なJSON (`{ "summary": "...", "transcription": "...`) から正規表現で救出
+      const sumMatch = strippedCode.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)/i);
+      const transMatch = strippedCode.match(/"transcription"\s*:\s*"((?:[^"\\]|\\.)*)/i);
+
+      if (sumMatch || transMatch) {
+        const unescapeJsonStr = (s) => {
+          if (!s) return '';
+          return s
+            .replace(/",\s*"transcri.*$/is, '') // 万が一末尾にキーの断片が残っていたら除去
+            .replace(/"\s*\}\s*$/s, '')
+            .replace(/\\n/g, '\n')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\')
+            .trim();
+        };
+        return {
+          summary: cleanHallucinationLoops(unescapeJsonStr(sumMatch ? sumMatch[1] : '')),
+          transcription: cleanHallucinationLoops(unescapeJsonStr(transMatch ? transMatch[1] : ''))
+        };
+      }
+
+      // パターンD: プレーンテキストの場合
+      const cleanedPlain = cleanHallucinationLoops(strippedCode);
+      return {
+        summary: cleanedPlain.slice(0, 350),
+        transcription: cleanedPlain
+      };
+    }
+
+    // 既存レコードが過去のバグで `{ "summary": ...` の生JSON文字列や「はい。はい。」ループを含んでいたら自動修復する
+    function repairRecordIfNeeded(item) {
+      if (!item || item.status !== 'completed') return false;
+      let modified = false;
+
+      const rawSum = String(item.summary || '');
+      const rawTrans = String(item.transcription || '');
+
+      // summary または transcription に JSON の殻 `{` や `"summary":` が残っている場合
+      if (rawSum.trim().startsWith('{') || rawTrans.trim().startsWith('{') || rawSum.includes('"summary"')) {
+        // より情報量の多い方（通常は全文が入っている transcription 側）を元に抽出
+        const sourceText = rawTrans.length >= rawSum.length ? rawTrans : rawSum;
+        const extracted = extractSummaryAndTranscription(sourceText);
+        if (extracted.summary) {
+          item.summary = extracted.summary;
+          modified = true;
+        }
+        if (extracted.transcription) {
+          item.transcription = extracted.transcription;
+          modified = true;
+        }
+      } else {
+        // JSON殻がなくても「はい。はい。はい。」等のループがあればクリーンアップ
+        const cleanedSum = cleanHallucinationLoops(rawSum);
+        const cleanedTrans = cleanHallucinationLoops(rawTrans);
+        if (cleanedSum !== rawSum) {
+          item.summary = cleanedSum;
+          modified = true;
+        }
+        if (cleanedTrans !== rawTrans) {
+          item.transcription = cleanedTrans;
+          modified = true;
+        }
+      }
+
+      return modified;
+    }
+
     // トースト通知 (alert代替)
     function showToast(message, type = 'info') {
       const container = document.getElementById('toast-container');
@@ -393,7 +508,6 @@
       updateNetworkBadge();
     });
 
-    // 画面復帰時にもオンラインかつ未処理があれば自動チェック
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
         const autoSync = localStorage.getItem('auto_sync_enabled') !== 'false';
@@ -452,7 +566,6 @@
         req.onsuccess = (e) => {
           db = e.target.result;
           loadSavedRecordings().then(() => {
-            // 起動時にオンラインであれば未処理データを自動処理
             const autoSync = localStorage.getItem('auto_sync_enabled') !== 'false';
             if (navigator.onLine && autoSync) {
               processPendingQueue(true);
@@ -710,7 +823,7 @@
         console.error("IndexedDB Save Failed:", dbErr);
       }
 
-      // 20分未満かつ15MB以下の場合のみMP3変換を試みる（1時間などの長時間録音でのメモリクラッシュ防止）
+      // 20分未満かつ15MB以下の場合のみMP3変換を試みる（長時間録音でのメモリクラッシュ防止）
       if (approxDurationSec < 1200 && rawBlob.size < 15 * 1024 * 1024) {
         try {
           const arrayBuffer = await rawBlob.arrayBuffer();
@@ -921,15 +1034,20 @@
 
       activeProcessingIds.add(item.id);
       const mimeType = item.mimeType || 'audio/webm';
-      const isLargeFile = item.audioBlob.size > 12 * 1024 * 1024; // 12MB超（長時間録音）はFile APIを使用
+      const isLargeFile = item.audioBlob.size > 12 * 1024 * 1024;
 
-      const promptText = `あなたはプロの議事録アシスタントです。
-提供された音声を忠実に日本語で文字起こしし、要約してください。
-必ず以下のJSON形式のみを出力してください（Markdown記法やコードブロックは不要です）:
-{
-  "summary": "録音内容の全体要約（主要な決定事項や論点を整理）",
-  "transcription": "音声の文字起こし全文"
-}`;
+      // JSONではなくマーカー区切り方式にすることで、長時間の文字起こしでも構文エラーや記号露出を防ぐ
+      const promptText = `あなたは優秀なプロの議事録作成・文字起こしアシスタントです。
+提供された音声を分析し、以下のフォーマット（区切り文字 ===SUMMARY=== と ===TRANSCRIPTION===）を使って出力してください。JSONやコードブロックは絶対に使わないでください。
+
+【重要ルール】
+1. 無音区間やノイズ、または「はい。はい。はい。」「うん、うん」といった意味のない相槌の連続は絶対に繰り返して出力しないでください（ループ厳禁）。
+2. 実質的な会話・議論の内容を忠実かつ読みやすい自然な日本語で文字起こししてください。
+
+===SUMMARY===
+（ここに録音内容の全体要約・主要な決定事項・論点を整理して記述）
+===TRANSCRIPTION===
+（ここに音声の文字起こし全文を記述）`;
 
       let uploadedFileName = null;
 
@@ -937,7 +1055,7 @@
         let audioPart = null;
 
         if (isLargeFile) {
-          updateCardSummaryStatus(item.id, `長時間音声データ (${Math.round(item.audioBlob.size / 1024 / 1024 * 10) / 10}MB) をGeminiサーバーへアップロード中...`, false, item, true);
+          updateCardSummaryStatus(item.id, `長時間音声 (${Math.round(item.audioBlob.size / 1024 / 1024 * 10) / 10}MB) をGeminiへアップロード中...`, false, item, true);
           const uploadResult = await uploadAudioViaFileApi(item.audioBlob, mimeType, apiKey, item.title);
           uploadedFileName = uploadResult.fileName;
           audioPart = {
@@ -946,7 +1064,7 @@
               file_uri: uploadResult.fileUri
             }
           };
-          updateCardSummaryStatus(item.id, `アップロード完了。Gemini (${model}) で文字起こし・要約を生成中...（約1〜2分かかります）`, false, item, true);
+          updateCardSummaryStatus(item.id, `アップロード完了。Gemini (${model}) で文字起こし・要約を生成中...（長時間音声のため1〜2分ほどかかります）`, false, item, true);
         } else {
           updateCardSummaryStatus(item.id, `Gemini (${model}) へ音声送信・要約を生成中...`, false, item, true);
           const base64Audio = await blobToBase64(item.audioBlob);
@@ -969,7 +1087,7 @@
           }],
           generationConfig: {
             temperature: 0.2,
-            responseMimeType: "application/json"
+            maxOutputTokens: 65536
           }
         };
 
@@ -998,16 +1116,10 @@
         }
 
         const rawText = candidate.content.parts?.[0]?.text || '';
-        let parsed = null;
-        try {
-          const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-          parsed = JSON.parse(cleanedText);
-        } catch (e) {
-          parsed = { summary: rawText.slice(0, 300), transcription: rawText };
-        }
+        const extracted = extractSummaryAndTranscription(rawText);
 
-        item.summary = parsed.summary || "要約が取得できませんでした";
-        item.transcription = parsed.transcription || "文字起こしが取得できませんでした";
+        item.summary = extracted.summary || "要約が取得できませんでした";
+        item.transcription = extracted.transcription || "文字起こしが取得できませんでした";
         item.status = 'completed';
         await updateRecordInDB(item);
 
@@ -1019,7 +1131,6 @@
       } finally {
         activeProcessingIds.delete(item.id);
         await refreshPendingButtonVisibility();
-        // アップロードした一時ファイルをクリーンアップ
         if (uploadedFileName) {
           fetch(`https://generativelanguage.googleapis.com/v1beta/${uploadedFileName}?key=${apiKey}`, { method: 'DELETE' }).catch(() => {});
         }
@@ -1112,6 +1223,14 @@
       document.getElementById('recordings-count').textContent = `${list.length} 件`;
       const container = document.getElementById('recordings-list');
       container.innerHTML = '';
+
+      // 起動時に過去の生JSON混入や「はい。はい。」ループを自動修復してDBを更新
+      for (const item of list) {
+        if (repairRecordIfNeeded(item)) {
+          await updateRecordInDB(item);
+        }
+      }
+
       list.reverse().forEach(item => renderRecordCard(item, false));
       await refreshPendingButtonVisibility();
     }
@@ -1209,7 +1328,6 @@
           </details>
         `;
       } else {
-        // 未完了時はいつでも手動で文字起こし・要約を開始できるボタンを表示
         return `
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gray-950/80 border border-gray-800/80 rounded-lg p-2.5">
             <div class="flex items-center space-x-2 text-amber-400/90 text-xs">
@@ -1249,7 +1367,6 @@
     function applySummaryToCard(item) {
       const section = document.getElementById(`summary-section-${item.id}`);
       if (section) section.innerHTML = renderSummaryContent(item);
-      // ステータスドットを緑色に更新
       const card = document.getElementById(`record-card-${item.id}`);
       if (card) {
         const dot = card.querySelector('span.rounded-full');

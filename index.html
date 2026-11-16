@@ -43,6 +43,17 @@
       background-color: #ef4444 !important;
       box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
     }
+    /* 有機EL焼き付き防止＆静的コンテンツ判定回避用の微細アニメーション（肉眼ではほぼ判別不能） */
+    @keyframes antiBurnInShift {
+      0%   { transform: translate(0px, 0px); opacity: 0.995; }
+      25%  { transform: translate(0.6px, 0px); opacity: 1; }
+      50%  { transform: translate(0.6px, 0.6px); opacity: 0.995; }
+      75%  { transform: translate(0px, 0.6px); opacity: 1; }
+      100% { transform: translate(0px, 0px); opacity: 0.995; }
+    }
+    .anti-static-active {
+      animation: antiBurnInShift 8s infinite linear;
+    }
     /* 自然な電卓数字フォント & カンマの幅詰め */
     .calc-number-display {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -52,6 +63,11 @@
   </style>
 </head>
 <body class="flex flex-col justify-between h-full w-full">
+
+  <!-- 疑似電源オフ（完全黒画面ロック・有機EL完全消灯）オーバーレイ -->
+  <div id="blackout-curtain" class="hidden fixed inset-0 bg-black z-[100] cursor-pointer select-none" style="background-color: #000000;" title="ダブルタップで画面復帰">
+    <!-- 周囲から見て電源オフと100%見分けがつかないよう完全な漆黒(#000000)にします -->
+  </div>
 
   <!-- 汎用トースト通知 -->
   <div id="toast-container" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2 pointer-events-none w-11/12 max-w-sm"></div>
@@ -125,8 +141,8 @@
       </div>
     </div>
 
-    <!-- 電卓ディスプレイ -->
-    <div class="flex-1 flex flex-col justify-end py-2 px-2 text-right shrink min-h-0">
+    <!-- 電卓ディスプレイ（録音中にここをダブルタップすると「疑似電源オフ（真っ暗画面）」になります） -->
+    <div id="calc-display-area" class="flex-1 flex flex-col justify-end py-2 px-2 text-right shrink min-h-0 cursor-pointer" title="録音中にダブルタップで画面消灯モード">
       <div id="calc-sub-display" class="calc-number-display text-gray-400 text-sm h-5 overflow-hidden tracking-wide"></div>
       <div class="flex items-baseline justify-end space-x-1">
         <span id="calc-main-display" class="calc-number-display text-5xl font-light text-white break-all">0</span>
@@ -179,8 +195,9 @@
           <div class="flex items-center space-x-2">
             <h1 class="text-base font-semibold leading-tight">スマートボイスレコーダー</h1>
             <span id="network-status-badge" class="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">オンライン</span>
+            <span id="wakelock-status-badge" class="hidden text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-950 text-indigo-300 border border-indigo-800">スリープ防止稼働中</span>
           </div>
-          <p class="text-xs text-gray-400">長時間音声対応 / ループ防止・自動＆手動文字起こし</p>
+          <p class="text-xs text-gray-400">スリープ遮断防止 / 無音カット修復 / 自動＆手動要約</p>
         </div>
       </div>
       <div class="flex items-center space-x-2">
@@ -228,6 +245,15 @@
         <input type="checkbox" id="toggle-auto-sync" checked class="w-4 h-4 accent-indigo-600 rounded cursor-pointer">
       </div>
 
+      <!-- 録音開始後の自動消灯（疑似電源オフ）設定 -->
+      <div class="flex items-center justify-between pt-2 border-t border-gray-800">
+        <div>
+          <span class="block text-xs font-medium text-gray-300">録音開始3秒後に自動で画面を真っ黒にする</span>
+          <span class="block text-[10px] text-gray-500">電卓で「%」2回タップ後、自動で疑似電源オフに移行します</span>
+        </div>
+        <input type="checkbox" id="toggle-auto-blackout" checked class="w-4 h-4 accent-indigo-600 rounded cursor-pointer">
+      </div>
+
       <!-- 暗号化バックアップ & 復元 -->
       <div class="pt-2 border-t border-gray-800 space-y-2">
         <label class="block text-xs font-medium text-gray-300">暗号化バックアップ & 復元 (AES-256)</label>
@@ -255,6 +281,14 @@
         </button>
       </div>
       <div id="record-status-label" class="text-xs text-gray-400 font-mono text-center">待機中 (電卓で「%」を素早く2回タップでも起動)</div>
+      <div class="w-full bg-gray-950/90 border border-gray-800 rounded-xl p-2.5 text-[11px] text-gray-300 space-y-1">
+        <div class="font-semibold text-emerald-400">💡 疑似電源オフ（真っ黒画面）モードでの録音手順</div>
+        <p class="text-gray-400 leading-relaxed">
+          1. 電卓で<span class="text-white font-medium">「%」をダブルタップ</span>して録音開始（赤い点を確認）。<br>
+          2. そのまま<span class="text-white font-medium">3秒待つ（または数字表示エリアをダブルタップ）</span>と、画面が完全に真っ黒になり、スリープ遮断を防ぎながら何時間でも録音できます。<br>
+          3. 止める時は、<span class="text-white font-medium">真っ黒な画面をダブルタップ</span>して電卓に戻り、再度「%」をダブルタップします。
+        </p>
+      </div>
     </div>
 
     <!-- 録音・要約リスト一覧ヘッダー＆一括実行ボタン -->
@@ -290,6 +324,17 @@
     let analyserNode = null;
     let animFrameId = null;
 
+    // スリープ防止（Wake Lock + 無音オーディオ + 疑似動画Canvasストリーム）用変数
+    let wakeLockSentinel = null;
+    let keepAliveOscillator = null;
+    let keepAliveVideoEl = null;
+    let keepAliveCanvasTimer = null;
+    let autoBlackoutTimer = null;
+
+    // 疑似電源オフ（完全黒画面）ダブルタップ判定用
+    let displayAreaTapTimer = null;
+    let blackoutTapTimer = null;
+
     // 現在処理中の録音IDを管理（二重実行防止）
     const activeProcessingIds = new Set();
     let isQueueRunning = false;
@@ -299,6 +344,169 @@
       subDisplay: '',
       history: []
     };
+
+    // ====================================================
+    // 10分自動ロック＆静的画面スリープを完全に防ぐ3重ガード
+    // ====================================================
+    async function enableKeepAwakeGuard() {
+      // 1. Screen Wake Lock API の取得
+      if ('wakeLock' in navigator) {
+        try {
+          if (!wakeLockSentinel) {
+            wakeLockSentinel = await navigator.wakeLock.request('screen');
+            wakeLockSentinel.addEventListener('release', () => {
+              wakeLockSentinel = null;
+              // 録音中なら即座に再取得を試みる
+              if (isRecording && document.visibilityState === 'visible') {
+                navigator.wakeLock.request('screen').then(s => { wakeLockSentinel = s; }).catch(() => {});
+              }
+            });
+          }
+        } catch (err) {
+          console.warn('WakeLock request warning:', err);
+        }
+      }
+
+      // 2. 画面が「静的なコンテンツ（静止画）」と判定されて10分で減光・ロックされるのを防ぐため、
+      //    電卓画面全体に0.6pxの微細シフトアニメーションを適用 + 不可視の疑似動画ストリームを再生維持する
+      const calcView = document.getElementById('calculator-view');
+      if (calcView) calcView.classList.add('anti-static-active');
+
+      const badge = document.getElementById('wakelock-status-badge');
+      if (badge) badge.classList.remove('hidden');
+
+      // 3. WakeLockが効かない端末やブラウザ向けに、1×1のCanvas動画ストリームをループ再生してOSに「動画再生中」と認識させる
+      try {
+        if (!keepAliveVideoEl) {
+          const cvs = document.createElement('canvas');
+          cvs.width = 2;
+          cvs.height = 2;
+          const ctx = cvs.getContext('2d');
+          let toggle = false;
+          keepAliveCanvasTimer = setInterval(() => {
+            if (!isRecording) return;
+            toggle = !toggle;
+            ctx.fillStyle = toggle ? '#121212' : '#131313';
+            ctx.fillRect(0, 0, 2, 2);
+          }, 1000);
+
+          if (cvs.captureStream) {
+            const vStream = cvs.captureStream(1);
+            keepAliveVideoEl = document.createElement('video');
+            keepAliveVideoEl.muted = true;
+            keepAliveVideoEl.loop = true;
+            keepAliveVideoEl.playsInline = true;
+            keepAliveVideoEl.setAttribute('playsinline', '');
+            keepAliveVideoEl.style.position = 'fixed';
+            keepAliveVideoEl.style.bottom = '0';
+            keepAliveVideoEl.style.right = '0';
+            keepAliveVideoEl.style.width = '1px';
+            keepAliveVideoEl.style.height = '1px';
+            keepAliveVideoEl.style.opacity = '0.01';
+            keepAliveVideoEl.style.pointerEvents = 'none';
+            keepAliveVideoEl.srcObject = vStream;
+            document.body.appendChild(keepAliveVideoEl);
+            await keepAliveVideoEl.play().catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn('Video keep-alive fallback skipped:', e);
+      }
+    }
+
+    async function disableKeepAwakeGuard() {
+      if (wakeLockSentinel) {
+        try {
+          await wakeLockSentinel.release();
+        } catch (e) {}
+        wakeLockSentinel = null;
+      }
+
+      const calcView = document.getElementById('calculator-view');
+      if (calcView) calcView.classList.remove('anti-static-active');
+
+      const badge = document.getElementById('wakelock-status-badge');
+      if (badge) badge.classList.add('hidden');
+
+      if (keepAliveCanvasTimer) {
+        clearInterval(keepAliveCanvasTimer);
+        keepAliveCanvasTimer = null;
+      }
+      if (keepAliveVideoEl) {
+        try {
+          keepAliveVideoEl.pause();
+          keepAliveVideoEl.srcObject = null;
+          keepAliveVideoEl.remove();
+        } catch (e) {}
+        keepAliveVideoEl = null;
+      }
+    }
+
+    // 疑似電源オフ（完全黒画面モード）の切り替え
+    function setBlackoutMode(enable) {
+      const curtain = document.getElementById('blackout-curtain');
+      if (!curtain) return;
+      if (enable) {
+        if (autoBlackoutTimer) {
+          clearTimeout(autoBlackoutTimer);
+          autoBlackoutTimer = null;
+        }
+        curtain.classList.remove('hidden');
+        enableKeepAwakeGuard();
+        // 可能であればフルスクリーン化して上部のステータスバー（時計・電池）も隠す
+        if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        curtain.classList.add('hidden');
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    }
+
+    // 電卓の数字表示エリアをダブルタップ → 録音中なら真っ暗画面（疑似電源オフ）にする
+    const calcDisplayArea = document.getElementById('calc-display-area');
+    if (calcDisplayArea) {
+      calcDisplayArea.addEventListener('click', () => {
+        if (displayAreaTapTimer) {
+          clearTimeout(displayAreaTapTimer);
+          displayAreaTapTimer = null;
+          if (isRecording) {
+            setBlackoutMode(true);
+          }
+        } else {
+          displayAreaTapTimer = setTimeout(() => {
+            displayAreaTapTimer = null;
+          }, 400);
+        }
+      });
+    }
+
+    // 真っ暗画面（疑似電源オフ）をダブルタップ → 元の電卓画面に復帰
+    const blackoutCurtain = document.getElementById('blackout-curtain');
+    if (blackoutCurtain) {
+      blackoutCurtain.addEventListener('click', () => {
+        if (blackoutTapTimer) {
+          clearTimeout(blackoutTapTimer);
+          blackoutTapTimer = null;
+          setBlackoutMode(false);
+        } else {
+          blackoutTapTimer = setTimeout(() => {
+            blackoutTapTimer = null;
+          }, 400);
+        }
+      });
+    }
+
+    // 録音中に画面タップやアプリ復帰があった際も、確実にWakeLockを再維持する
+    ['touchstart', 'click'].forEach(evtName => {
+      document.addEventListener(evtName, () => {
+        if (isRecording && !wakeLockSentinel && 'wakeLock' in navigator) {
+          navigator.wakeLock.request('screen').then(s => { wakeLockSentinel = s; }).catch(() => {});
+        }
+      }, { passive: true });
+    });
 
     // ====================================================
     // 文字列クリーンアップ＆「はい。はい。」等のループ除去・JSON殻剥がし
@@ -499,8 +707,8 @@
       updateNetworkBadge();
       const autoSync = localStorage.getItem('auto_sync_enabled') !== 'false';
       if (autoSync) {
-        showToast('ネットワーク接続を検知しました。未処理データの文字起こし・要約を自動開始します。', 'info');
-        processPendingQueue(false);
+        showToast('ネットワーク接続を確認しました。未処理データの文字起こし・要約を自動開始します。', 'info');
+        processPendingQueue(true);
       }
     });
 
@@ -509,10 +717,15 @@
     });
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        const autoSync = localStorage.getItem('auto_sync_enabled') !== 'false';
-        if (autoSync) {
-          processPendingQueue(true);
+      if (document.visibilityState === 'visible') {
+        if (isRecording) {
+          enableKeepAwakeGuard();
+        }
+        if (navigator.onLine) {
+          const autoSync = localStorage.getItem('auto_sync_enabled') !== 'false';
+          if (autoSync) {
+            processPendingQueue(true);
+          }
         }
       }
     });
@@ -727,17 +940,34 @@
 
     async function startRecording() {
       try {
-        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const source = audioContext.createMediaStreamSource(audioStream);
         analyserNode = audioContext.createAnalyser();
         analyserNode.fftSize = 64;
         source.connect(analyserNode);
 
+        // オーディオセッションがOSにサスペンドされないよう極小無音オシレーターを接続
+        try {
+          const silentGain = audioContext.createGain();
+          silentGain.gain.value = 0.00001;
+          keepAliveOscillator = audioContext.createOscillator();
+          keepAliveOscillator.frequency.value = 1;
+          keepAliveOscillator.connect(silentGain);
+          silentGain.connect(audioContext.destination);
+          keepAliveOscillator.start();
+        } catch (oscErr) {}
+
         recordedChunks = [];
         mediaRecorder = new MediaRecorder(audioStream);
         mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) recordedChunks.push(e.data);
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
         };
         mediaRecorder.onstop = handleRecordingComplete;
 
@@ -745,24 +975,50 @@
         isRecording = true;
         recStartTime = Date.now();
 
+        // 10分自動スリープ＆静的コンテンツ減光を阻止するガードを起動
+        await enableKeepAwakeGuard();
+
         document.getElementById('stealth-rec-indicator').classList.add('active');
         document.getElementById('rec-btn-icon').className = "w-6 h-6 rounded-full bg-red-600 animate-pulse";
-        document.getElementById('record-status-label').textContent = "● 録音中...";
+        document.getElementById('record-status-label').textContent = "● 録音中... (電卓の数字部分をダブルタップで画面消灯モード)";
         drawWaveform();
+
+        // 電卓画面で録音開始した場合、設定がONなら3秒後に自動で真っ黒画面（疑似電源オフ）へ移行
+        const calcView = document.getElementById('calculator-view');
+        const autoBlackout = localStorage.getItem('auto_blackout_enabled') !== 'false';
+        if (autoBlackout && calcView && !calcView.classList.contains('hidden')) {
+          if (autoBlackoutTimer) clearTimeout(autoBlackoutTimer);
+          autoBlackoutTimer = setTimeout(() => {
+            if (isRecording && !calcView.classList.contains('hidden')) {
+              setBlackoutMode(true);
+            }
+          }, 3000);
+        }
       } catch (err) {
         showToast("マイクの利用許可が必要です: " + err.message, 'error');
       }
     }
 
     function stopRecording() {
+      if (autoBlackoutTimer) {
+        clearTimeout(autoBlackoutTimer);
+        autoBlackoutTimer = null;
+      }
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
       }
       if (audioStream) {
         audioStream.getTracks().forEach(t => t.stop());
       }
+      if (keepAliveOscillator) {
+        try { keepAliveOscillator.stop(); } catch (e) {}
+        keepAliveOscillator = null;
+      }
       if (animFrameId) cancelAnimationFrame(animFrameId);
       isRecording = false;
+
+      setBlackoutMode(false);
+      disableKeepAwakeGuard();
 
       document.getElementById('stealth-rec-indicator').classList.remove('active');
       document.getElementById('rec-btn-icon').className = "w-6 h-6 rounded-sm bg-white";
@@ -795,11 +1051,11 @@
     // 録音完了時処理
     async function handleRecordingComplete() {
       const rawBlob = new Blob(recordedChunks, { type: 'audio/webm' });
-      const approxDurationSec = Math.max(1, Math.round((Date.now() - recStartTime) / 1000));
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
       const timestampStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
       const title = `録音_${timestampStr}`;
+      const elapsedSec = recStartTime > 0 ? Math.max(1, Math.round((Date.now() - recStartTime) / 1000)) : 0;
 
       const recordItem = {
         title: title,
@@ -807,7 +1063,7 @@
         audioBlob: rawBlob,
         mimeType: 'audio/webm',
         sizeKb: Math.max(1, Math.round(rawBlob.size / 1024)),
-        durationSec: approxDurationSec,
+        durationSec: elapsedSec,
         summary: null,
         transcription: null,
         status: 'pending'
@@ -823,48 +1079,51 @@
         console.error("IndexedDB Save Failed:", dbErr);
       }
 
-      // 20分未満かつ15MB以下の場合のみMP3変換を試みる（長時間録音でのメモリクラッシュ防止）
-      if (approxDurationSec < 1200 && rawBlob.size < 15 * 1024 * 1024) {
+      // 20分未満かつ15MB未満の録音であれば、末尾の無音カットとMP3軽量化を実行
+      const MAX_MP3_CONVERT_BYTES = 15 * 1024 * 1024;
+      if (rawBlob.size < MAX_MP3_CONVERT_BYTES && elapsedSec < 1200) {
         try {
           const arrayBuffer = await rawBlob.arrayBuffer();
           const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
           const decodedBuffer = await tempCtx.decodeAudioData(arrayBuffer);
-          recordItem.durationSec = Math.round(decodedBuffer.duration);
 
-          let targetBuffer = decodedBuffer;
-          if (decodedBuffer.duration < 600) {
-            targetBuffer = trimSilence(decodedBuffer, 0.02);
-          }
+          const targetBuffer = trimSilence(decodedBuffer, 0.008);
+          recordItem.durationSec = Math.max(1, Math.round(targetBuffer.duration));
 
-          const mp3Blob = encodeToMp3(targetBuffer);
+          const mp3Blob = encodeToMp3(targetBuffer, 64);
           recordItem.audioBlob = mp3Blob;
           recordItem.mimeType = 'audio/mp3';
           recordItem.sizeKb = Math.max(1, Math.round(mp3Blob.size / 1024));
 
+          if (tempCtx.close) tempCtx.close().catch(() => {});
           if (id) await updateRecordInDB(recordItem);
           applyAudioUpdateToCard(recordItem);
         } catch (audioErr) {
-          console.warn("MP3 conversion skipped or failed, keeping original WebM audio:", audioErr);
+          console.warn("MP3 conversion skipped, keeping original WebM audio:", audioErr);
         }
       }
 
       document.getElementById('record-status-label').textContent = "待機中 (電卓で「%」を素早いダブルタップ)";
       
       if (!navigator.onLine) {
-        updateCardSummaryStatus(recordItem.id, "オフラインのため待機中（Wi-Fi接続時に自動実行、または下のボタンから手動実行できます）", false, recordItem);
+        updateCardSummaryStatus(recordItem.id, "オフラインのため待機中です（Wi-Fi接続時に自動実行、または下のボタンから手動実行できます）", false, recordItem);
         return;
       }
 
       requestGeminiSummary(recordItem);
     }
 
-    function trimSilence(buffer, threshold = 0.02) {
+    function trimSilence(buffer, threshold = 0.008) {
       const channelData = buffer.getChannelData(0);
+      const sampleRate = buffer.sampleRate;
       let start = 0;
       let end = channelData.length - 1;
 
       while (start < channelData.length && Math.abs(channelData[start]) < threshold) start++;
       while (end > start && Math.abs(channelData[end]) < threshold) end--;
+
+      start = Math.max(0, start - Math.floor(sampleRate * 0.5));
+      end = Math.min(channelData.length - 1, end + Math.floor(sampleRate * 1.5));
 
       if (start >= end) return buffer;
 
@@ -875,13 +1134,79 @@
       for (let c = 0; c < buffer.numberOfChannels; c++) {
         newBuffer.copyToChannel(buffer.getChannelData(c).subarray(start, end), c);
       }
+      if (newCtx.close) newCtx.close().catch(() => {});
       return newBuffer;
     }
 
-    function encodeToMp3(audioBuffer) {
+    // 途中でスリープに入ってしまい後半が長い無音になった録音データを検出し、無音部分を切り落として修復する関数
+    async function trimTrailingSilenceAndRepair(id) {
+      if (!db || activeProcessingIds.has(id)) return;
+      const item = await getRecordById(id);
+      if (!item || !item.audioBlob) {
+        showToast("対象の音声データが見つかりません。", "error");
+        return;
+      }
+
+      const ok = await showConfirmModal(
+        "音声データを解析し、スリープ等で無音になってしまった後半部分を自動で切り落として修復しますか？（50MB超のデータの場合、10〜20秒ほどかかります）",
+        "無音カット修復の実行"
+      );
+      if (!ok) return;
+
+      updateCardSummaryStatus(id, "音声波形を解析して無音区間をトリミング中...（そのままお待ちください）", false, item, true);
+
+      try {
+        const arrayBuffer = await item.audioBlob.arrayBuffer();
+        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const decodedBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+
+        const channelData = decodedBuffer.getChannelData(0);
+        const sampleRate = decodedBuffer.sampleRate;
+        const origSec = Math.round(decodedBuffer.duration);
+
+        // 末尾からスキャンし、有意な音声（振幅 0.008 以上）が存在する最後の位置を探す
+        const threshold = 0.008;
+        let lastActiveSample = channelData.length - 1;
+        while (lastActiveSample > 0 && Math.abs(channelData[lastActiveSample]) < threshold) {
+          lastActiveSample--;
+        }
+
+        // 余韻として後ろに2秒分の余裕を持たせる
+        const marginSamples = Math.min(channelData.length, lastActiveSample + sampleRate * 2);
+        const newDurationSec = Math.max(1, Math.round(marginSamples / sampleRate));
+
+        if (origSec - newDurationSec < 5) {
+          showToast("末尾に5秒以上の長い無音区間は見つかりませんでした。", "info");
+          applySummaryToCard(item);
+          return;
+        }
+
+        // 有効区間だけを抽出した新しいAudioBufferを作成し、MP3(64kbps・モノラル)へ軽量エンコード
+        const trimmedBuffer = tempCtx.createBuffer(1, marginSamples, sampleRate);
+        trimmedBuffer.copyToChannel(channelData.subarray(0, marginSamples), 0);
+
+        const mp3Blob = encodeToMp3(trimmedBuffer, 64);
+        item.audioBlob = mp3Blob;
+        item.mimeType = 'audio/mp3';
+        item.sizeKb = Math.max(1, Math.round(mp3Blob.size / 1024));
+        item.durationSec = newDurationSec;
+
+        await updateRecordInDB(item);
+        applyAudioUpdateToCard(item);
+        applySummaryToCard(item);
+
+        showToast(`無音区間をカットしました！（${formatDurationLabel(origSec)} → ${formatDurationLabel(newDurationSec)} / ${item.sizeKb.toLocaleString()} KB）`, "success");
+      } catch (err) {
+        console.error("Trim Silence Error:", err);
+        showToast("無音カット処理中にエラーが発生しました: " + err.message, "error");
+        applySummaryToCard(item);
+      }
+    }
+
+    function encodeToMp3(audioBuffer, kbps = 96) {
       const channels = 1;
       const sampleRate = audioBuffer.sampleRate;
-      const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128);
+      const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
       const samples = audioBuffer.getChannelData(0);
       const sampleBlockSize = 1152;
       const mp3Data = [];
@@ -901,6 +1226,60 @@
       if (endBuf.length > 0) mp3Data.push(endBuf);
 
       return new Blob(mp3Data, { type: 'audio/mp3' });
+    }
+
+    // 既存の録音データ（例: 8分30秒以降が無音になっている56分のデータ）から無音区間を切り落として修復する機能
+    async function trimAndRepairExistingRecord(id) {
+      if (!db || activeProcessingIds.has(id)) return;
+      const item = await getRecordById(id);
+      if (!item || !item.audioBlob) return;
+
+      const confirmTrim = await showConfirmModal(
+        "音声データを解析し、スリープ等で無音になっている後半部分（例: 8分30秒以降の無音など）を自動で切り落として修復しますか？\n（修復後、そのまま再要約も可能です）",
+        "無音区間のカット修復"
+      );
+      if (!confirmTrim) return;
+
+      activeProcessingIds.add(id);
+      updateCardSummaryStatus(id, "音声波形を解析して無音区間を切り落としています...（大容量ファイルのため数十秒かかります）", false, item, true);
+
+      try {
+        const arrayBuffer = await item.audioBlob.arrayBuffer();
+        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const decodedBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+        const origDuration = Math.round(decodedBuffer.duration);
+
+        const trimmedBuffer = trimSilence(decodedBuffer, 0.008);
+        const newDuration = Math.round(trimmedBuffer.duration);
+        if (tempCtx.close) tempCtx.close().catch(() => {});
+
+        if (origDuration - newDuration < 5) {
+          showToast("大きな無音区間は見つかりませんでした（元の長さを維持します）。", "info");
+          applySummaryToCard(item);
+          return;
+        }
+
+        updateCardSummaryStatus(id, `無音区間をカットしました（${formatDurationLabel(origDuration)} → ${formatDurationLabel(newDuration)}）。MP3へ再圧縮中...`, false, item, true);
+        await new Promise(r => setTimeout(r, 100));
+
+        const mp3Blob = encodeToMp3(trimmedBuffer, 64);
+        item.audioBlob = mp3Blob;
+        item.mimeType = 'audio/mp3';
+        item.durationSec = newDuration;
+        item.sizeKb = Math.max(1, Math.round(mp3Blob.size / 1024));
+
+        await updateRecordInDB(item);
+        applyAudioUpdateToCard(item);
+        applySummaryToCard(item);
+
+        showToast(`無音カット完了！ ${formatDurationLabel(origDuration)} → ${formatDurationLabel(newDuration)} (${item.sizeKb.toLocaleString()} KB) に修復しました。`, "success");
+      } catch (err) {
+        console.error("Trim repair error:", err);
+        showToast("無音カット処理中にメモリ制限等のエラーが発生しました: " + err.message, "error");
+        applySummaryToCard(item);
+      } finally {
+        activeProcessingIds.delete(id);
+      }
     }
 
     // 1時間などの大容量音声ファイル向け: Gemini File API へのアップロード処理
@@ -1272,12 +1651,17 @@
 
         <audio id="audio-player-${item.id}" controls class="w-full h-8" src="${audioUrl}"></audio>
 
-        <div class="flex justify-between items-center text-gray-400 text-[10px] pt-1">
+        <div class="flex flex-wrap justify-between items-center gap-2 text-gray-400 text-[10px] pt-1">
           <span id="audio-meta-${item.id}">${item.sizeKb.toLocaleString()} KB · ${formatDurationLabel(item.durationSec)}</span>
-          <a id="audio-download-${item.id}" href="${audioUrl}" download="${item.title}.${ext}" class="text-indigo-400 hover:underline flex items-center space-x-1">
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-            <span>${ext.toUpperCase()}保存</span>
-          </a>
+          <div class="flex items-center space-x-3">
+            <button type="button" onclick="trimTrailingSilenceAndRepair(${item.id})" class="text-amber-400 hover:text-amber-300 flex items-center space-x-1 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded" title="スリープ等で後半が無音になった音声データを切り詰めて修復します">
+              <span>✂️ 後半の無音をカット修復</span>
+            </button>
+            <a id="audio-download-${item.id}" href="${audioUrl}" download="${item.title}.${ext}" class="text-indigo-400 hover:underline flex items-center space-x-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              <span>${ext.toUpperCase()}保存</span>
+            </a>
+          </div>
         </div>
 
         <div id="summary-section-${item.id}" class="pt-2 border-t border-gray-800 space-y-2">
@@ -1409,6 +1793,7 @@
       document.getElementById('input-api-key').value = localStorage.getItem('gemini_api_key') || '';
       document.getElementById('select-model').value = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
       document.getElementById('toggle-auto-sync').checked = localStorage.getItem('auto_sync_enabled') !== 'false';
+      document.getElementById('toggle-auto-blackout').checked = localStorage.getItem('auto_blackout_enabled') !== 'false';
     });
 
     document.getElementById('btn-close-settings').addEventListener('click', () => {
@@ -1419,9 +1804,11 @@
       const key = document.getElementById('input-api-key').value.trim();
       const model = document.getElementById('select-model').value;
       const autoSync = document.getElementById('toggle-auto-sync').checked;
+      const autoBlackout = document.getElementById('toggle-auto-blackout').checked;
       localStorage.setItem('gemini_api_key', key);
       localStorage.setItem('gemini_model', model);
       localStorage.setItem('auto_sync_enabled', String(autoSync));
+      localStorage.setItem('auto_blackout_enabled', String(autoBlackout));
       showToast("設定を保存しました！", "success");
       document.getElementById('settings-panel').classList.add('hidden');
 
@@ -1432,6 +1819,10 @@
 
     document.getElementById('toggle-auto-sync').addEventListener('change', (e) => {
       localStorage.setItem('auto_sync_enabled', String(e.target.checked));
+    });
+
+    document.getElementById('toggle-auto-blackout').addEventListener('change', (e) => {
+      localStorage.setItem('auto_blackout_enabled', String(e.target.checked));
     });
 
     // 暗号化バックアップ & 復元
